@@ -10,3 +10,4 @@ exclude =
     dist,
     build,
     .github,
+    alembic/versions,
