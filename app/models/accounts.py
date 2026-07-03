@@ -1,5 +1,6 @@
 import enum
 from datetime import date, datetime
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -14,6 +15,13 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.tokens import (
+        ActivationTokenModel,
+        PasswordResetTokenModel,
+        RefreshTokenModel,
+    )
 
 
 class UserGroupEnum(str, enum.Enum):
@@ -66,6 +74,25 @@ class User(Base):
     )
 
     group: Mapped["UserGroup"] = relationship(back_populates="users")
+
+    activation_token: Mapped[Optional["ActivationTokenModel"]] = relationship(
+        "ActivationTokenModel",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    password_reset_token: Mapped[Optional["PasswordResetTokenModel"]] = relationship(
+        "PasswordResetTokenModel",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    refresh_tokens: Mapped[list["RefreshTokenModel"]] = relationship(
+        "RefreshTokenModel",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
     profile: Mapped["UserProfile"] = relationship(
         back_populates="user",
         uselist=False,
