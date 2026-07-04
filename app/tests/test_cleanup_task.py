@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
-from celery.local import PromiseProxy
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.celery_app import celery_app
