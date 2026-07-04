@@ -1,21 +1,25 @@
-from __future__ import annotations
-
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud.accounts import (
     activate_user,
+    authenticate_user,
     create_activation_token,
     create_user,
     delete_activation_token,
+    delete_refresh_token,
     get_activation_token_by_user_id,
     get_activation_token_with_user,
+    get_refresh_token,
+    get_refresh_token_by_user_id,
     get_user_by_email,
+    get_user_by_id,
     get_user_group_by_name,
 )
 from app.models.accounts import User, UserGroup, UserGroupEnum
-from app.models.tokens import ActivationTokenModel
+from app.models.tokens import ActivationTokenModel, RefreshTokenModel
+from app.security import hash_password
 
 pytestmark = pytest.mark.asyncio
 
@@ -147,3 +151,102 @@ class TestActivateUser:
         await db_session.commit()
 
         assert user.is_active is True
+
+
+class TestGetUserById:
+    async def test_returns_existing_user(self, db_session: AsyncSession, user: User):
+        found = await get_user_by_id(db_session, user.id)
+
+        assert found is not None
+        assert found.id == user.id
+
+    async def test_returns_none_when_missing(self, db_session: AsyncSession):
+        assert await get_user_by_id(db_session, 999_999) is None
+
+
+class TestAuthenticateUser:
+    @pytest_asyncio.fixture
+    async def user_with_known_password(
+        self, db_session: AsyncSession, user_group: UserGroup
+    ) -> User:
+        u = User(
+            email="auth@example.com",
+            hashed_password=hash_password("CorrectPass123"),
+            group_id=user_group.id,
+        )
+        db_session.add(u)
+        await db_session.commit()
+        return u
+
+    async def test_returns_user_with_correct_credentials(
+        self, db_session: AsyncSession, user_with_known_password: User
+    ):
+        found = await authenticate_user(
+            db_session, email="auth@example.com", password="CorrectPass123"
+        )
+
+        assert found is not None
+        assert found.id == user_with_known_password.id
+
+    async def test_returns_none_with_wrong_password(
+        self, db_session: AsyncSession, user_with_known_password: User
+    ):
+        found = await authenticate_user(
+            db_session, email="auth@example.com", password="WrongPassword"
+        )
+
+        assert found is None
+
+    async def test_returns_none_for_unknown_email(self, db_session: AsyncSession):
+        found = await authenticate_user(
+            db_session, email="missing@example.com", password="whatever"
+        )
+
+        assert found is None
+
+
+class TestRefreshTokenCrud:
+    async def test_get_refresh_token_returns_matching_record(
+        self, db_session: AsyncSession, user: User
+    ):
+        token = RefreshTokenModel(user_id=user.id, token="raw-refresh-token")
+        db_session.add(token)
+        await db_session.commit()
+
+        found = await get_refresh_token(db_session, "raw-refresh-token")
+
+        assert found is not None
+        assert found.id == token.id
+
+    async def test_get_refresh_token_returns_none_when_missing(
+        self, db_session: AsyncSession
+    ):
+        assert await get_refresh_token(db_session, "does-not-exist") is None
+
+    async def test_get_refresh_token_by_user_id(
+        self, db_session: AsyncSession, user: User
+    ):
+        token = RefreshTokenModel(user_id=user.id)
+        db_session.add(token)
+        await db_session.commit()
+
+        found = await get_refresh_token_by_user_id(db_session, user.id)
+
+        assert found is not None
+        assert found.id == token.id
+
+    async def test_get_refresh_token_by_user_id_returns_none_when_missing(
+        self, db_session: AsyncSession, user: User
+    ):
+        assert await get_refresh_token_by_user_id(db_session, user.id) is None
+
+    async def test_delete_refresh_token(self, db_session: AsyncSession, user: User):
+        token = RefreshTokenModel(user_id=user.id)
+        db_session.add(token)
+        await db_session.commit()
+        token_id = token.id
+
+        await delete_refresh_token(db_session, token)
+        await db_session.commit()
+
+        assert await db_session.get(RefreshTokenModel, token_id) is None
