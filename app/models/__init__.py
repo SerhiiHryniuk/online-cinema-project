@@ -11,6 +11,14 @@ from app.models.tokens import (
     RefreshTokenModel
 )
 
+from app.models.movies import (
+    Genre,
+    Star,
+    Director,
+    Certification,
+    Movie,
+)
+
 __all__ = [
     "GenderEnum",
     "User",
@@ -20,4 +28,9 @@ __all__ = [
     "ActivationTokenModel",
     "PasswordResetTokenModel",
     "RefreshTokenModel",
+    "Genre",
+    "Star",
+    "Director",
+    "Certification",
+    "Movie",
 ]
