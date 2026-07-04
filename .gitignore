@@ -26,5 +26,9 @@ Thumbs.db
 staticfiles/
 media/
 
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+
 *.sqlite3
 *.db
