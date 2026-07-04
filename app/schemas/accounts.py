@@ -28,3 +28,17 @@ class ResendActivationRequestSchema(BaseModel):
 
 class MessageResponseSchema(BaseModel):
     message: str
+
+
+class UserLoginSchema(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
+class TokenResponseSchema(BaseModel):
+    access_token: str
+    refresh_token: str
+
+
+class TokenRefreshSchema(BaseModel):
+    refresh_token: str

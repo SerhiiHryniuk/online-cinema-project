@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import cast
+from typing import cast, Annotated
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,21 +8,27 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
+from app.api.deps import get_current_user
+from app.crud.accounts import authenticate_user, get_user_by_id, get_refresh_token, delete_refresh_token, \
+    get_refresh_token_by_user_id
 from app.db.session import get_db
-from app.models.accounts import UserGroupEnum
+from app.models import RefreshTokenModel
+from app.models.accounts import UserGroupEnum, User
 from app.schemas.accounts import (
     MessageResponseSchema,
     ResendActivationRequestSchema,
     UserActivationRequestSchema,
     UserRegistrationRequestSchema,
-    UserRegistrationResponseSchema,
+    UserRegistrationResponseSchema, TokenResponseSchema, UserLoginSchema, TokenRefreshSchema,
 )
 from app.security import hash_password
 from app.core.config import settings
+from app.security.tokens import create_access_token, create_refresh_token, decode_token
 from app.tasks.emails import (
     send_activation_complete_email_task,
     send_activation_email_task,
 )
+from loguru import logger
 
 router = APIRouter()
 
@@ -267,3 +273,208 @@ async def resend_activation(
     send_activation_email_task.delay(str(user.email), activation_link)
 
     return MessageResponseSchema(message="A new activation link has been sent to your email.")
+
+
+@router.post(
+    "/login/",
+    response_model=TokenResponseSchema,
+    summary="User Login",
+    description="Authenticate a user and return access and refresh tokens.",
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        401: {
+            "description": "Unauthorized - Invalid email or password.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Invalid email or password."
+                    }
+                }
+            },
+        },
+        403: {
+            "description": "Forbidden - User account is not activated.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "User account is not activated."
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Internal Server Error - An error occurred while processing the request.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "An error occurred while processing the request."
+                    }
+                }
+            },
+        },
+    },
+)
+async def login(
+    login_data: UserLoginSchema,
+    db: Annotated[AsyncSession, Depends(get_db)]
+):
+    user = await authenticate_user(
+        db=db,
+        email=login_data.email,
+        password=login_data.password
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is not activated.",
+        )
+
+    jwt_refresh_token = create_refresh_token(user_id=user.id)
+    try:
+        refresh_token = RefreshTokenModel.create(
+            user_id=user.id,
+            days_valid=settings.REFRESH_TOKEN_EXPIRE_DAYS,
+            token=jwt_refresh_token
+        )
+        db.add(refresh_token)
+        await db.flush()
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while processing the request.",
+        )
+
+    return TokenResponseSchema(
+        access_token=create_access_token(user_id=user.id),
+        refresh_token=jwt_refresh_token
+    )
+
+
+@router.post(
+    "/refresh/",
+    response_model=TokenResponseSchema,
+    summary="Refresh Access Token",
+    description="Invalidates the old refresh token, rotates it, and returns a brand new pair of access and refresh tokens.",
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {
+            "description": "Bad Request - The provided refresh token is malformed, invalid, or expired.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Invalid token"}
+                }
+            },
+        },
+        401: {
+            "description": "Unauthorized - The refresh token does not exist in the database or is unauthorized.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Refresh token not found."}
+                }
+            },
+        },
+    },
+)
+async def refresh(
+    refresh_token_data: TokenRefreshSchema,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    try:
+        decoded_data = decode_token(
+            token=refresh_token_data.refresh_token,
+            token_type="refresh"
+        )
+    except Exception as error:
+        logger.error(error)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid token"
+        )
+
+    refresh_token_record = await get_refresh_token(db, refresh_token_data.refresh_token)
+    if not refresh_token_record:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token not found.",
+        )
+
+    await delete_refresh_token(db, refresh_token_record)
+
+    user_id = int(decoded_data.get("sub"))
+    user = await get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+    new_jwt_refresh_token = create_refresh_token(user_id=user_id)
+    try:
+        new_refresh_token_db = RefreshTokenModel.create(
+            user_id=user_id,
+            days_valid=settings.REFRESH_TOKEN_EXPIRE_DAYS,
+            token=new_jwt_refresh_token
+        )
+        db.add(new_refresh_token_db)
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while processing the request.",
+        )
+
+    return TokenResponseSchema(
+        access_token=create_access_token(user_id=user_id),
+        refresh_token=new_jwt_refresh_token
+    )
+
+
+@router.post(
+    "/logout/",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="User Logout",
+    description="Log out the current user by deleting their refresh token from the database, preventing future token refreshes.",
+    responses={
+        204: {
+            "description": "Successfully logged out. No content is returned."
+        },
+        401: {
+            "description": "Unauthorized - Missing/invalid access token or refresh token session already expired.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Invalid token"}
+                }
+            },
+        },
+    },
+)
+async def logout(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)]
+) -> None:
+    token = await get_refresh_token_by_user_id(db, user.id)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+    try:
+        await delete_refresh_token(db, token)
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred during logout."
+        )
