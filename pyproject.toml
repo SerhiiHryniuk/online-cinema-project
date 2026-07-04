@@ -21,6 +21,7 @@ dependencies = [
     "python-dotenv (>=1.2.2,<2.0.0)",
     "flake8 (>=7.3.0,<8.0.0)",
     "alembic (>=1.18.5,<2.0.0)",
+    "greenlet (>=3.5.3,<4.0.0)",
 ]
 
 
