@@ -5,6 +5,11 @@ from app.models.accounts import (
     UserGroupEnum,
     UserProfile,
 )
+from app.models.tokens import (
+    ActivationTokenModel,
+    PasswordResetTokenModel,
+    RefreshTokenModel
+)
 
 __all__ = [
     "GenderEnum",
