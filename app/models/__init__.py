@@ -18,6 +18,11 @@ from app.models.movies import (
     Certification,
     Movie,
 )
+from app.models.orders import (
+    Order,
+    OrderItem,
+    OrderStatus,
+)
 
 __all__ = [
     "GenderEnum",
@@ -33,4 +38,7 @@ __all__ = [
     "Director",
     "Certification",
     "Movie",
+    "Order",
+    "OrderItem",
+    "OrderStatus",
 ]
