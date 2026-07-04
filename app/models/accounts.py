@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         PasswordResetTokenModel,
         RefreshTokenModel,
     )
+    from app.models.orders import Order
 
 
 class UserGroupEnum(str, enum.Enum):
@@ -97,6 +98,10 @@ class User(Base):
         back_populates="user",
         uselist=False,
         cascade="all, delete-orphan",
+    )
+
+    orders: Mapped[list["Order"]] = relationship(
+        "Order", back_populates="user", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
