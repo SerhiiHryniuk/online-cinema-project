@@ -5,7 +5,7 @@ from sqlalchemy import Integer, String, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from security.utils import generate_secure_token
+from app.security import generate_secure_token
 if TYPE_CHECKING:
     from app.models.accounts import User
 
