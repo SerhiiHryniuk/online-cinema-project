@@ -6,6 +6,14 @@ from app.models.accounts import (
     UserProfile,
 )
 
+from app.models.movies import (
+    Genre,
+    Star,
+    Director,
+    Certification,
+    Movie,
+)
+
 __all__ = [
     "GenderEnum",
     "User",
