@@ -3,11 +3,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.models.accounts import User, UserGroup, UserGroupEnum
-from app.models.tokens import ActivationTokenModel
+from app.models.tokens import ActivationTokenModel, RefreshTokenModel
+from app.security import verify_password
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
     stmt = select(User).where(User.email == email)
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
+async def get_user_by_id(db: AsyncSession, id: int) -> User | None:
+    stmt = select(User).where(User.id == id)
     result = await db.execute(stmt)
     return result.scalars().first()
 
@@ -62,3 +69,30 @@ async def delete_activation_token(db: AsyncSession, token: ActivationTokenModel)
 
 async def activate_user(user: User) -> None:
     user.is_active = True
+
+
+async def authenticate_user(db: AsyncSession, email: str, password: str) -> User | None:
+    user = await get_user_by_email(db, email)
+    if not user:
+        return None
+
+    if not verify_password(password, user.hashed_password):
+        return None
+
+    return user
+
+
+async def get_refresh_token(db: AsyncSession, token: str) -> RefreshTokenModel | None:
+    stmt = select(RefreshTokenModel).filter_by(token=token)
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
+async def get_refresh_token_by_user_id(db: AsyncSession, user_id: int) -> RefreshTokenModel | None:
+    stmt = select(RefreshTokenModel).filter_by(user_id=user_id)
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
+async def delete_refresh_token(db: AsyncSession, token: RefreshTokenModel) -> None:
+    await db.delete(token)
