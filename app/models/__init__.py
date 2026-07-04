@@ -20,4 +20,9 @@ __all__ = [
     "UserGroup",
     "UserGroupEnum",
     "UserProfile",
+    "Genre",
+    "Star",
+    "Director",
+    "Certification",
+    "Movie",
 ]
