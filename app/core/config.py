@@ -33,5 +33,18 @@ class Settings(BaseSettings):
 
     API_V1_PREFIX: str = "/api/v1"
 
+    BASE_URL: str = "http://127.0.0.1:8000"
+    EMAIL_HOST: str = "mailhog"
+    EMAIL_PORT: int = 1025
+    EMAIL_HOST_USER: str = "testing@mail.com"
+    EMAIL_HOST_PASSWORD: str = "test_password"
+    EMAIL_USE_TLS: bool = False
+
+    EMAIL_TEMPLATE_DIR: str = "app/notifications/templates"
+    ACTIVATION_EMAIL_TEMPLATE_NAME: str = "activation_request.html"
+    ACTIVATION_COMPLETE_EMAIL_TEMPLATE_NAME: str = "activation_complete.html"
+    PASSWORD_EMAIL_TEMPLATE_NAME: str = "password_reset_request.html"
+    PASSWORD_COMPLETE_EMAIL_TEMPLATE_NAME: str = "password_reset_complete.html"
+
 
 settings = Settings()
