@@ -17,4 +17,7 @@ __all__ = [
     "UserGroup",
     "UserGroupEnum",
     "UserProfile",
+    "ActivationTokenModel",
+    "PasswordResetTokenModel",
+    "RefreshTokenModel",
 ]
