@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import uuid
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     String,
@@ -19,6 +20,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+
+if TYPE_CHECKING:
+    from app.models.orders import OrderItem
 
 
 movie_genres = Table(
@@ -118,4 +123,8 @@ class Movie(Base):
     )
     stars: Mapped[list["Star"]] = relationship(
         secondary=movie_stars, back_populates="movies"
+    )
+
+    order_items: Mapped[list["OrderItem"]] = relationship(
+        "OrderItem", back_populates="movie"
     )
