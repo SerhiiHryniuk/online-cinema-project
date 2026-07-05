@@ -48,6 +48,7 @@ async def inactive_user(db_session: AsyncSession, user_group: UserGroup) -> User
 
 
 ACTIVE_USER_PASSWORD = "CorrectPass123"
+COMPLEX_PASSWORD = "Complex123$"
 
 
 @pytest_asyncio.fixture
@@ -106,7 +107,11 @@ class TestRegisterUser:
     ):
         response = await client.post(
             "/accounts/register/",
-            json={"email": "new@example.com", "password": "StrongPass123"},
+            json={
+                "email": "new@example.com",
+                "password": COMPLEX_PASSWORD,
+                "password_confirm": COMPLEX_PASSWORD
+            },
         )
 
         assert response.status_code == 201
@@ -131,7 +136,11 @@ class TestRegisterUser:
     ):
         response = await client.post(
             "/accounts/register/",
-            json={"email": inactive_user.email, "password": "StrongPass123"},
+            json={
+                "email": inactive_user.email,
+                "password": COMPLEX_PASSWORD,
+                "password_confirm": COMPLEX_PASSWORD
+            },
         )
 
         assert response.status_code == 409
@@ -141,7 +150,11 @@ class TestRegisterUser:
     ):
         response = await client.post(
             "/accounts/register/",
-            json={"email": "no-group@example.com", "password": "StrongPass123"},
+            json={
+                "email": "no-group@example.com",
+                "password": COMPLEX_PASSWORD,
+                "password_confirm": COMPLEX_PASSWORD
+            },
         )
 
         assert response.status_code == 500

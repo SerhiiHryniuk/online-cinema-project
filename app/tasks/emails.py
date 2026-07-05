@@ -45,9 +45,9 @@ def send_activation_complete_email_task(self, email: str, login_link: str) -> No
     max_retries=3,
     default_retry_delay=60,
 )
-def send_password_reset_email_task(self, email: str, reset_link: str) -> None:
+def send_password_reset_email_task(self, email: str, token: str) -> None:
     try:
-        asyncio.run(send_password_reset_email(email, reset_link))
+        asyncio.run(send_password_reset_email(email, token))
     except Exception as error:
         logger.error(f"Failed to send password reset email to {email}: {error}")
         raise self.retry(exc=error)
