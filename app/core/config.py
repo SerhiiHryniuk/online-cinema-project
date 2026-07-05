@@ -46,5 +46,8 @@ class Settings(BaseSettings):
     PASSWORD_EMAIL_TEMPLATE_NAME: str = "password_reset_request.html"
     PASSWORD_COMPLETE_EMAIL_TEMPLATE_NAME: str = "password_reset_complete.html"
 
+    SUPERUSER_EMAIL: str
+    SUPERUSER_PASSWORD: str
+
 
 settings = Settings()
