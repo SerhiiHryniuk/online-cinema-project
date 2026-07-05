@@ -27,3 +27,40 @@ async def get_genre_by_id(
     stmt = select(Genre).where(Genre.id == genre_id)
     result = await db.execute(stmt)
     return result.scalars().first()
+
+
+async def get_genre_by_name(
+    db: AsyncSession,
+    name: str,
+) -> Genre | None:
+    stmt = select(Genre).where(Genre.name == name)
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
+async def create_genre(
+    db: AsyncSession,
+    name: str,
+) -> Genre:
+    genre = Genre(name=name)
+    db.add(genre)
+    await db.flush()
+    return genre
+
+
+async def update_genre(
+    db: AsyncSession,
+    genre: Genre,
+    name: str,
+) -> Genre:
+    genre.name = name
+    await db.flush()
+    return genre
+
+
+async def delete_genre(
+    db: AsyncSession,
+    genre: Genre,
+) -> None:
+    await db.delete(genre)
+    await db.flush()

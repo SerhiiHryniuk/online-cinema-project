@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class GenreSchema(BaseModel):
@@ -12,3 +12,7 @@ class GenreWithCountSchema(BaseModel):
     id: int
     name: str
     movie_count: int
+
+
+class GenreCreateSchema(BaseModel):
+    name: str = Field(min_length=1, max_length=100)

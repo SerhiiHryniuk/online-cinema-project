@@ -4,11 +4,24 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crud.genres import get_genre_by_id, get_genres_with_counts
+from app.api.deps import allowed_roles_user
+from app.crud.genres import (
+    create_genre,
+    delete_genre,
+    get_genre_by_id,
+    get_genre_by_name,
+    get_genres_with_counts,
+    update_genre,
+)
 from app.crud.movies import _apply_filters, _apply_sorting
 from app.db.session import get_db
+from app.models.accounts import User, UserGroupEnum
 from app.models.movies import Movie, movie_genres
-from app.schemas.genres import GenreWithCountSchema
+from app.schemas.genres import (
+    GenreCreateSchema,
+    GenreSchema,
+    GenreWithCountSchema,
+)
 from app.schemas.movies import (
     MovieFilterParams,
     MovieListItemSchema,
@@ -39,6 +52,125 @@ async def list_genres(
         )
         for genre, count in rows
     ]
+
+
+@router.post(
+    "/",
+    response_model=GenreSchema,
+    summary="Create a Genre",
+    description="Create a new genre. Moderator or admin only.",
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        403: {"description": "Forbidden - Not enough permissions."},
+        409: {"description": "Conflict - Genre already exists."},
+    },
+)
+async def create_new_genre(
+    payload: GenreCreateSchema,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[
+        User,
+        Depends(
+            allowed_roles_user(
+                UserGroupEnum.MODERATOR,
+                UserGroupEnum.ADMIN,
+            )
+        ),
+    ],
+) -> GenreSchema:
+    existing = await get_genre_by_name(db, payload.name)
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Genre already exists.",
+        )
+
+    genre = await create_genre(db, payload.name)
+    await db.commit()
+    await db.refresh(genre)
+
+    return GenreSchema.model_validate(genre)
+
+
+@router.put(
+    "/{genre_id}/",
+    response_model=GenreSchema,
+    summary="Update a Genre",
+    description="Rename a genre. Moderator or admin only.",
+    status_code=status.HTTP_200_OK,
+    responses={
+        403: {"description": "Forbidden - Not enough permissions."},
+        404: {"description": "Not Found - Genre does not exist."},
+        409: {"description": "Conflict - Genre name already taken."},
+    },
+)
+async def update_existing_genre(
+    genre_id: int,
+    payload: GenreCreateSchema,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[
+        User,
+        Depends(
+            allowed_roles_user(
+                UserGroupEnum.MODERATOR,
+                UserGroupEnum.ADMIN,
+            )
+        ),
+    ],
+) -> GenreSchema:
+    genre = await get_genre_by_id(db, genre_id)
+    if genre is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Genre not found.",
+        )
+
+    duplicate = await get_genre_by_name(db, payload.name)
+    if duplicate is not None and duplicate.id != genre_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Genre name already taken.",
+        )
+
+    genre = await update_genre(db, genre, payload.name)
+    await db.commit()
+    await db.refresh(genre)
+
+    return GenreSchema.model_validate(genre)
+
+
+@router.delete(
+    "/{genre_id}/",
+    summary="Delete a Genre",
+    description="Delete a genre. Moderator or admin only.",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        403: {"description": "Forbidden - Not enough permissions."},
+        404: {"description": "Not Found - Genre does not exist."},
+    },
+)
+async def delete_existing_genre(
+    genre_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[
+        User,
+        Depends(
+            allowed_roles_user(
+                UserGroupEnum.MODERATOR,
+                UserGroupEnum.ADMIN,
+            )
+        ),
+    ],
+) -> None:
+    genre = await get_genre_by_id(db, genre_id)
+    if genre is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Genre not found.",
+        )
+
+    await delete_genre(db, genre)
+    await db.commit()
 
 
 @router.get(
