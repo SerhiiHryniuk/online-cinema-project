@@ -12,6 +12,11 @@ from app.crud.accounts import (
     get_refresh_token,
     get_refresh_token_by_user_id,
     delete_refresh_token,
+    create_password_reset_token,
+    get_password_reset_token_by_user_id,
+    get_password_reset_token_with_user_by_token,
+    update_user_password,
+    delete_password_reset_token,
 )
 
 __all__ = [
@@ -28,4 +33,9 @@ __all__ = [
     "get_refresh_token",
     "get_refresh_token_by_user_id",
     "delete_refresh_token",
+    "create_password_reset_token",
+    "get_password_reset_token_by_user_id",
+    "get_password_reset_token_with_user_by_token",
+    "update_user_password",
+    "delete_password_reset_token",
 ]
