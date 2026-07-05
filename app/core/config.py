@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     REDIS_URL: str
 
     STORAGE_ENDPOINT_URL: str
+    STORAGE_PUBLIC_URL: str
     STORAGE_ACCESS_KEY: str
     STORAGE_SECRET_KEY: str
     STORAGE_BUCKET_NAME: str
