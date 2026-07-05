@@ -2,8 +2,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.models.accounts import User, UserGroup, UserGroupEnum
-from app.models.tokens import ActivationTokenModel, RefreshTokenModel
+from app.models import PasswordResetTokenModel
+from app.models.accounts import (
+    User,
+    UserGroup,
+    UserGroupEnum
+)
+from app.models.tokens import (
+    ActivationTokenModel,
+    RefreshTokenModel,
+    TokenBaseModel
+)
 from app.security import verify_password
 
 
@@ -30,6 +39,10 @@ async def create_user(db: AsyncSession, email: str, hashed_password: str, group_
     db.add(user)
     await db.flush()
     return user
+
+
+async def delete_token(db: AsyncSession, token: TokenBaseModel) -> None:
+    await db.delete(token)
 
 
 async def create_activation_token(db: AsyncSession, user_id: int) -> ActivationTokenModel:
@@ -64,7 +77,7 @@ async def get_activation_token_by_user_id(
 
 
 async def delete_activation_token(db: AsyncSession, token: ActivationTokenModel) -> None:
-    await db.delete(token)
+    await delete_token(db, token)
 
 
 async def activate_user(user: User) -> None:
@@ -96,3 +109,38 @@ async def get_refresh_token_by_user_id(db: AsyncSession, user_id: int) -> Refres
 
 async def delete_refresh_token(db: AsyncSession, token: RefreshTokenModel) -> None:
     await db.delete(token)
+
+
+async def create_password_reset_token(db: AsyncSession, user_id: int) -> PasswordResetTokenModel:
+    token = PasswordResetTokenModel(user_id=user_id)
+    db.add(token)
+    await db.flush()
+    return token
+
+
+async def get_password_reset_token_by_user_id(
+    db: AsyncSession, user_id: int
+) -> PasswordResetTokenModel | None:
+    stmt = select(PasswordResetTokenModel).where(PasswordResetTokenModel.user_id == user_id)
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
+async def get_password_reset_token_with_user_by_token(
+    db: AsyncSession, token: str
+) -> PasswordResetTokenModel | None:
+    stmt = (
+        select(PasswordResetTokenModel)
+        .options(joinedload(PasswordResetTokenModel.user))
+        .where(PasswordResetTokenModel.token == token)
+    )
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
+async def update_user_password(user: User, hashed_password: str) -> None:
+    user.hashed_password = hashed_password
+
+
+async def delete_password_reset_token(db: AsyncSession, token: PasswordResetTokenModel) -> None:
+    await delete_token(db, token)
