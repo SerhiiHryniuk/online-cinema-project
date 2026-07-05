@@ -23,6 +23,7 @@ if TYPE_CHECKING:
         RefreshTokenModel,
     )
     from app.models.orders import Order
+    from app.models.carts import Cart
 
 
 class UserGroupEnum(str, enum.Enum):
@@ -102,6 +103,10 @@ class User(Base):
 
     orders: Mapped[list["Order"]] = relationship(
         "Order", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    cart: Mapped["Cart"] = relationship(
+        "Cart", back_populates="user", uselist=False
     )
 
     def __repr__(self) -> str:
