@@ -23,6 +23,10 @@ from app.models.orders import (
     OrderItem,
     OrderStatus,
 )
+from app.models.carts import (
+    Cart,
+    CartItem,
+)
 
 __all__ = [
     "GenderEnum",
@@ -41,4 +45,6 @@ __all__ = [
     "Order",
     "OrderItem",
     "OrderStatus",
+    "Cart",
+    "CartItem",
 ]
