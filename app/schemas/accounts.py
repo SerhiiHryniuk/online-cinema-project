@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Optional
 
 from pydantic import (
     BaseModel,
@@ -7,8 +7,10 @@ from pydantic import (
     EmailStr,
     Field,
     AfterValidator,
-    model_validator
+    model_validator, field_validator
 )
+
+from app.models import UserGroupEnum
 
 
 def validate_password_strength(password: str) -> str:
@@ -100,3 +102,21 @@ class PasswordResetRequestSchema(BaseModel):
 
 class PasswordResetCompleteRequestSchema(PasswordMatchMixin):
     token: str
+
+
+class UserAdminUpdateRequestSchema(BaseModel):
+    group: Optional[UserGroupEnum] = None
+    is_active: Optional[bool] = None
+
+
+class UserAdminUpdateResponseSchema(UserRegistrationResponseSchema):
+    group: UserGroupEnum
+
+    @field_validator("group", mode="before")
+    @classmethod
+    def transform_group_object(cls, v):
+        if v and hasattr(v, "name"):
+            if hasattr(v.name, "value"):
+                return v.name.value
+            return v.name
+        return v

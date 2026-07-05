@@ -8,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, allowed_roles_user
 from app.db.session import get_db
 from app.models import RefreshTokenModel
 from app.models.accounts import UserGroupEnum, User
@@ -24,14 +24,17 @@ from app.schemas.accounts import (
     PasswordResetCompleteRequestSchema,
     PasswordResetRequestSchema,
     PasswordChangeRequestSchema,
+    UserAdminUpdateRequestSchema,
+    UserAdminUpdateResponseSchema,
 )
-from app.security import hash_password, verify_password
-from app.core.config import settings
-from app.security.tokens import (
+from app.security import (
+    hash_password,
+    verify_password,
     create_access_token,
     create_refresh_token,
-    decode_token
+    decode_token,
 )
+from app.core.config import settings
 from app.tasks.emails import (
     send_activation_complete_email_task,
     send_activation_email_task,
@@ -79,7 +82,7 @@ def _build_activation_link(email: str, token: str) -> str:
 )
 async def register_user(
         user_data: UserRegistrationRequestSchema,
-        db: AsyncSession = Depends(get_db),
+        db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserRegistrationResponseSchema:
     existing_user = await crud.get_user_by_email(db, str(user_data.email))
     if existing_user:
@@ -187,7 +190,7 @@ async def _activate_user_account(
 )
 async def activate_account(
         activation_data: UserActivationRequestSchema,
-        db: AsyncSession = Depends(get_db),
+        db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MessageResponseSchema:
     return await _activate_user_account(
         str(activation_data.email), activation_data.token, db
@@ -218,9 +221,9 @@ async def activate_account(
     },
 )
 async def activate_account_via_link(
-        email: EmailStr = Query(..., description="Email address from the activation link."),
-        token: str = Query(..., description="Activation token from the activation link."),
-        db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
+    email: EmailStr = Query(..., description="Email address from the activation link."),
+    token: str = Query(..., description="Activation token from the activation link."),
 ) -> MessageResponseSchema:
     return await _activate_user_account(str(email), token, db)
 
@@ -255,7 +258,7 @@ async def activate_account_via_link(
 )
 async def resend_activation(
         resend_data: ResendActivationRequestSchema,
-        db: AsyncSession = Depends(get_db),
+        db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MessageResponseSchema:
     user = await crud.get_user_by_email(db, str(resend_data.email))
 
@@ -640,3 +643,46 @@ async def reset_password(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MessageResponseSchema:
     return await _reset_password(reset_data.token, reset_data.password, db)
+
+
+require_admin = allowed_roles_user(UserGroupEnum.ADMIN)
+
+
+@router.post(
+    "/users/{user_id}/change-user",
+    response_model=UserAdminUpdateResponseSchema,
+)
+async def change_user(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user_id: int,
+    update_data: UserAdminUpdateRequestSchema,
+    current_user=Depends(require_admin)
+):
+    user = await crud.get_user_with_group_by_id(db, user_id)
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if update_data.group is not None:
+        db_group = await crud.get_user_group_by_name(db, update_data.group)
+
+        if not db_group:
+            raise HTTPException(status_code=404, detail="Target user group not found in database")
+
+        user.group = db_group
+
+    if update_data.is_active is not None:
+        user.is_active = update_data.is_active
+
+    try:
+        await db.commit()
+        await db.refresh(user)
+    except SQLAlchemyError as e:
+        await db.rollback()
+        logger.error(f"Failed to update user {user_id} by admin: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while updating the user."
+        )
+
+    return UserAdminUpdateResponseSchema.model_validate(user)
