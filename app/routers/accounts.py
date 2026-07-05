@@ -17,14 +17,26 @@ from app.schemas.accounts import (
     ResendActivationRequestSchema,
     UserActivationRequestSchema,
     UserRegistrationRequestSchema,
-    UserRegistrationResponseSchema, TokenResponseSchema, UserLoginSchema, TokenRefreshSchema,
+    UserRegistrationResponseSchema,
+    TokenResponseSchema,
+    UserLoginSchema,
+    TokenRefreshSchema,
+    PasswordResetCompleteRequestSchema,
+    PasswordResetRequestSchema,
+    PasswordChangeRequestSchema,
 )
-from app.security import hash_password
+from app.security import hash_password, verify_password
 from app.core.config import settings
-from app.security.tokens import create_access_token, create_refresh_token, decode_token
+from app.security.tokens import (
+    create_access_token,
+    create_refresh_token,
+    decode_token
+)
 from app.tasks.emails import (
     send_activation_complete_email_task,
     send_activation_email_task,
+    send_password_reset_complete_email_task,
+    send_password_reset_email_task,
 )
 from loguru import logger
 
@@ -476,3 +488,155 @@ async def logout(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred during logout."
         )
+
+
+async def _reset_password(
+        token: str,
+        new_password: str,
+        db: AsyncSession,
+) -> MessageResponseSchema:
+    token_record = await crud.get_password_reset_token_with_user_by_token(db, token=token)
+
+    now_utc = datetime.now(timezone.utc)
+    if not token_record or cast(datetime, token_record.expires_at).replace(tzinfo=timezone.utc) < now_utc:
+        if token_record:
+            await crud.delete_password_reset_token(db, token_record)
+            await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset password token."
+        )
+
+    user = token_record.user
+    if not user.is_active:
+        await crud.delete_password_reset_token(db, token_record)
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset password token."
+        )
+
+    try:
+        await crud.update_user_password(user, hash_password(new_password))
+        await crud.delete_password_reset_token(db, token_record)
+
+        old_refresh_token = await crud.get_refresh_token_by_user_id(db, user.id)
+        if old_refresh_token:
+            await crud.delete_refresh_token(db, old_refresh_token)
+
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while resetting the password."
+        )
+
+    login_link = f"{settings.BASE_URL}/api/v1/accounts/login/"
+    send_password_reset_complete_email_task.delay(str(user.email), login_link)
+
+    return MessageResponseSchema(message="Password has been reset successfully.")
+
+
+@router.post(
+    "/change-password/",
+    response_model=MessageResponseSchema,
+    summary="Change Password",
+    description="Change the password for the currently authenticated user by providing the old password and a new one.",
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {
+            "description": "Bad Request - The old password is incorrect.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Old password is incorrect."}
+                }
+            },
+        },
+    },
+)
+async def change_password(
+    password_data: PasswordChangeRequestSchema,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> MessageResponseSchema:
+    if not verify_password(password_data.old_password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Old password is incorrect.",
+        )
+
+    try:
+        await crud.update_user_password(user, hash_password(password_data.password))
+
+        old_refresh_token = await crud.get_refresh_token_by_user_id(db, user.id)
+        if old_refresh_token:
+            await crud.delete_refresh_token(db, old_refresh_token)
+
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while changing the password.",
+        )
+
+    return MessageResponseSchema(message="Password changed successfully.")
+
+
+@router.post(
+    "/forgot-password/",
+    response_model=MessageResponseSchema,
+    summary="Forgot Password",
+    description=(
+        "Request a password reset. If the email belongs to an active "
+        "registered user, a reset token is sent by email. The response is "
+        "intentionally generic in all cases to avoid leaking which emails "
+        "are registered."
+    ),
+    status_code=status.HTTP_200_OK,
+)
+async def forgot_password(
+    reset_data: PasswordResetRequestSchema,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MessageResponseSchema:
+    user = await crud.get_user_by_email(db, str(reset_data.email))
+
+    if user and user.is_active:
+        old_token = await crud.get_password_reset_token_by_user_id(db, user.id)
+        if old_token:
+            await crud.delete_password_reset_token(db, old_token)
+            await db.flush()
+
+        new_token = await crud.create_password_reset_token(db, user_id=user.id)
+        await db.commit()
+
+        send_password_reset_email_task.delay(str(user.email), new_token.token)
+
+    return MessageResponseSchema(
+        message="If this email is registered and active, a password reset token has been sent."
+    )
+
+
+@router.post(
+    "/reset-password/",
+    response_model=MessageResponseSchema,
+    summary="Reset Password",
+    description="Complete a password reset using the token sent to the user's email.",
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {
+            "description": "Bad Request - The reset token is invalid or expired.",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Invalid or expired reset password token."}
+                }
+            },
+        },
+    },
+)
+async def reset_password(
+    reset_data: PasswordResetCompleteRequestSchema,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MessageResponseSchema:
+    return await _reset_password(reset_data.token, reset_data.password, db)
