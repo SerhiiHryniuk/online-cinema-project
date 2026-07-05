@@ -24,6 +24,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.orders import OrderItem
+    from app.models.interactions import Comment, Favorite, Like, Rating
 
 
 movie_genres = Table(
@@ -127,4 +128,17 @@ class Movie(Base):
 
     order_items: Mapped[list["OrderItem"]] = relationship(
         "OrderItem", back_populates="movie"
+    )
+
+    likes: Mapped[list["Like"]] = relationship(
+        "Like", back_populates="movie", cascade="all, delete-orphan"
+    )
+    ratings: Mapped[list["Rating"]] = relationship(
+        "Rating", back_populates="movie", cascade="all, delete-orphan"
+    )
+    favorites: Mapped[list["Favorite"]] = relationship(
+        "Favorite", back_populates="movie", cascade="all, delete-orphan"
+    )
+    comments: Mapped[list["Comment"]] = relationship(
+        "Comment", back_populates="movie", cascade="all, delete-orphan"
     )

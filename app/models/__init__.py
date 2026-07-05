@@ -27,6 +27,15 @@ from app.models.carts import (
     Cart,
     CartItem,
 )
+from app.models.interactions import (
+    Comment,
+    Favorite,
+    Like,
+    LikeType,
+    Notification,
+    NotificationType,
+    Rating,
+)
 
 __all__ = [
     "GenderEnum",
@@ -47,4 +56,11 @@ __all__ = [
     "OrderStatus",
     "Cart",
     "CartItem",
+    "Comment",
+    "Favorite",
+    "Like",
+    "LikeType",
+    "Notification",
+    "NotificationType",
+    "Rating",
 ]

@@ -24,6 +24,13 @@ if TYPE_CHECKING:
     )
     from app.models.orders import Order
     from app.models.carts import Cart
+    from app.models.interactions import (
+        Comment,
+        Favorite,
+        Like,
+        Notification,
+        Rating,
+    )
 
 
 class UserGroupEnum(str, enum.Enum):
@@ -61,7 +68,9 @@ class User(Base):
         String(255), unique=True, nullable=False, index=True
     )
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -83,10 +92,12 @@ class User(Base):
         cascade="all, delete-orphan"
     )
 
-    password_reset_token: Mapped[Optional["PasswordResetTokenModel"]] = relationship(
-        "PasswordResetTokenModel",
-        back_populates="user",
-        cascade="all, delete-orphan"
+    password_reset_token: Mapped[Optional["PasswordResetTokenModel"]] = (
+        relationship(
+            "PasswordResetTokenModel",
+            back_populates="user",
+            cascade="all, delete-orphan"
+        )
     )
 
     refresh_tokens: Mapped[list["RefreshTokenModel"]] = relationship(
@@ -107,6 +118,26 @@ class User(Base):
 
     cart: Mapped["Cart"] = relationship(
         "Cart", back_populates="user", uselist=False
+    )
+
+    likes: Mapped[list["Like"]] = relationship(
+        "Like", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    ratings: Mapped[list["Rating"]] = relationship(
+        "Rating", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    favorites: Mapped[list["Favorite"]] = relationship(
+        "Favorite", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    comments: Mapped[list["Comment"]] = relationship(
+        "Comment", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    notifications: Mapped[list["Notification"]] = relationship(
+        "Notification", back_populates="user", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
