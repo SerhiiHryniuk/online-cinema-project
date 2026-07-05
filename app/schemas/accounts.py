@@ -18,10 +18,14 @@ def validate_password_strength(password: str) -> str:
     has_special = any(not char.isalnum() for char in password)
 
     errors = []
-    if not has_upper: errors.append("one uppercase letter")
-    if not has_lower: errors.append("one lowercase letter")
-    if not has_digit: errors.append("one number")
-    if not has_special: errors.append("one special character")
+    if not has_upper:
+        errors.append("one uppercase letter")
+    if not has_lower:
+        errors.append("one lowercase letter")
+    if not has_digit:
+        errors.append("one number")
+    if not has_special:
+        errors.append("one special character")
 
     if errors:
         raise ValueError(f"Password must contain at least: {', '.join(errors)}.")
