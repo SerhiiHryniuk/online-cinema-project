@@ -12,3 +12,11 @@ class TokenError(Exception):
 
 class InvalidTokenTypeError(TokenError):
     pass
+
+
+class MinioConnectionError(BaseAppError):
+    pass
+
+
+class MinioFileUploadError(BaseAppError):
+    pass

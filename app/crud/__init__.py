@@ -19,6 +19,11 @@ from app.crud.accounts import (
     update_user_password,
     delete_password_reset_token,
 )
+from app.crud.profiles import (
+    create_profile,
+    get_profile,
+    update_profile,
+)
 
 __all__ = [
     "activate_user",
@@ -40,4 +45,7 @@ __all__ = [
     "get_password_reset_token_with_user_by_token",
     "update_user_password",
     "delete_password_reset_token",
+    "get_profile",
+    "create_profile",
+    "update_profile",
 ]
