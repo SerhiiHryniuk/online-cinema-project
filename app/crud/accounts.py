@@ -28,6 +28,13 @@ async def get_user_by_id(db: AsyncSession, id: int) -> User | None:
     return result.scalars().first()
 
 
+async def get_user_with_group_by_id(db: AsyncSession, id: int) -> User | None:
+    stmt = select(User).where(User.id == id)
+    stmt = stmt.options(joinedload(User.group)).where(User.id == id)
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
 async def get_user_group_by_name(db: AsyncSession, name: UserGroupEnum) -> UserGroup | None:
     stmt = select(UserGroup).where(UserGroup.name == name)
     result = await db.execute(stmt)
