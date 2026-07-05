@@ -34,4 +34,6 @@ celerybeat-schedule-wal
 *.db
 dev_seed_movies.py
 dev_seed_user.py
-dev_seed_genres
+dev_seed_genres.py
+dev_seed_order.py
+
