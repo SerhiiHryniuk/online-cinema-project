@@ -47,9 +47,9 @@ async def send_activation_complete_email(email: str, login_link: str) -> None:
     await _send_email(email, "Account Activated Successfully", html_content)
 
 
-async def send_password_reset_email(email: str, reset_link: str) -> None:
+async def send_password_reset_email(email: str, token: str) -> None:
     template = _env.get_template(settings.PASSWORD_EMAIL_TEMPLATE_NAME)
-    html_content = template.render(email=email, reset_link=reset_link)
+    html_content = template.render(email=email, token=token)
     await _send_email(email, "Password Reset Request", html_content)
 
 
