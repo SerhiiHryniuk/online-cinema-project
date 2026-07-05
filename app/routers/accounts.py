@@ -9,8 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
 from app.api.deps import get_current_user
-from app.crud.accounts import authenticate_user, get_user_by_id, get_refresh_token, delete_refresh_token, \
-    get_refresh_token_by_user_id
 from app.db.session import get_db
 from app.models import RefreshTokenModel
 from app.models.accounts import UserGroupEnum, User
@@ -318,7 +316,7 @@ async def login(
     login_data: UserLoginSchema,
     db: Annotated[AsyncSession, Depends(get_db)]
 ):
-    user = await authenticate_user(
+    user = await crud.authenticate_user(
         db=db,
         email=login_data.email,
         password=login_data.password
@@ -400,17 +398,17 @@ async def refresh(
             detail="Invalid token"
         )
 
-    refresh_token_record = await get_refresh_token(db, refresh_token_data.refresh_token)
+    refresh_token_record = await crud.get_refresh_token(db, refresh_token_data.refresh_token)
     if not refresh_token_record:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token not found.",
         )
 
-    await delete_refresh_token(db, refresh_token_record)
+    await crud.delete_refresh_token(db, refresh_token_record)
 
     user_id = int(decoded_data.get("sub"))
-    user = await get_user_by_id(db, user_id)
+    user = await crud.get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -462,7 +460,7 @@ async def logout(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)]
 ) -> None:
-    token = await get_refresh_token_by_user_id(db, user.id)
+    token = await crud.get_refresh_token_by_user_id(db, user.id)
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -470,7 +468,7 @@ async def logout(
         )
 
     try:
-        await delete_refresh_token(db, token)
+        await crud.delete_refresh_token(db, token)
         await db.commit()
     except SQLAlchemyError:
         await db.rollback()
