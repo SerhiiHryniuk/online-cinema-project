@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.routers.accounts import router as accounts_router
 from app.routers.comments import router as comments_router
 from app.routers.favorites import router as favorites_router
+from app.routers.genres import router as genres_router
 from app.routers.likes import router as likes_router
 from app.routers.movies import router as movies_router
 from app.routers.notifications import router as notifications_router
@@ -25,3 +26,4 @@ api_router.include_router(
 api_router.include_router(
     notifications_router, prefix="/notifications", tags=["notifications"]
 )
+api_router.include_router(genres_router, prefix="/genres", tags=["genres"])
