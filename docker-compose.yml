@@ -106,6 +106,8 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379/0
+      - STORAGE_ENDPOINT_URL=http://minio:9000
+      - STORAGE_PUBLIC_URL=http://localhost:9000
       - SMTP_HOST=mailhog
       - SMTP_PORT=1025
     depends_on:
@@ -115,6 +117,8 @@ services:
         condition: service_healthy
       mailhog:
         condition: service_started
+      minio:
+        condition: service_healthy
 
   minio:
     image: minio/minio:latest
@@ -131,6 +135,11 @@ services:
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: [ "CMD", "mc", "ready", "local" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
