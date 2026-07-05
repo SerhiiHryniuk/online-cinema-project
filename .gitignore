@@ -32,3 +32,4 @@ celerybeat-schedule-wal
 
 *.sqlite3
 *.db
+dev_seed_movies.py
