@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,7 +8,8 @@ class Settings(BaseSettings):
     APP_NAME: str = "Online Cinema"
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
-    SECRET_KEY: str
+
+    SECRET_KEY: str = Field(default=...)
     ALGORITHM: str = "HS256"
 
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
@@ -18,19 +20,19 @@ class Settings(BaseSettings):
     MINIO_PORT: int = 9000
     MINIO_CONSOLE_PORT: int = 9001
 
-    POSTGRES_USER: str
-    POSTGRES_PASSWORD: str
-    POSTGRES_DB: str
-    POSTGRES_PORT: int
-    DATABASE_URL: str
+    POSTGRES_USER: str = Field(default=...)
+    POSTGRES_PASSWORD: str = Field(default=...)
+    POSTGRES_DB: str = Field(default=...)
+    POSTGRES_PORT: int = Field(default=...)
+    DATABASE_URL: str = Field(default=...)
 
-    REDIS_URL: str
+    REDIS_URL: str = Field(default=...)
 
-    STORAGE_ENDPOINT_URL: str
-    STORAGE_PUBLIC_URL: str
-    STORAGE_ACCESS_KEY: str
-    STORAGE_SECRET_KEY: str
-    STORAGE_BUCKET_NAME: str
+    STORAGE_ENDPOINT_URL: str = Field(default=...)
+    STORAGE_PUBLIC_URL: str = Field(default=...)
+    STORAGE_ACCESS_KEY: str = Field(default=...)
+    STORAGE_SECRET_KEY: str = Field(default=...)
+    STORAGE_BUCKET_NAME: str = Field(default=...)
 
     API_V1_PREFIX: str = "/api/v1"
 
@@ -47,8 +49,8 @@ class Settings(BaseSettings):
     PASSWORD_EMAIL_TEMPLATE_NAME: str = "password_reset_request.html"
     PASSWORD_COMPLETE_EMAIL_TEMPLATE_NAME: str = "password_reset_complete.html"
 
-    SUPERUSER_EMAIL: str
-    SUPERUSER_PASSWORD: str
+    SUPERUSER_EMAIL: str = Field(default=...)
+    SUPERUSER_PASSWORD: str = Field(default=...)
 
 
 settings = Settings()
