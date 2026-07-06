@@ -24,6 +24,21 @@ from app.crud.profiles import (
     get_profile,
     update_profile,
 )
+from app.crud.orders import (
+    get_user_cart_with_items,
+    get_user_purchased_movies,
+    get_user_pending_orders_with_movies,
+    check_movies_available,
+    create_order_from_cart,
+    add_order_items,
+    clear_user_cart,
+    get_order_by_id,
+    get_user_orders,
+    get_all_orders,
+    update_order_status,
+    can_cancel_order,
+    revalidate_order_total,
+)
 
 __all__ = [
     "activate_user",
@@ -48,4 +63,17 @@ __all__ = [
     "get_profile",
     "create_profile",
     "update_profile",
+    "get_user_cart_with_items",
+    "get_user_purchased_movies",
+    "get_user_pending_orders_with_movies",
+    "check_movies_available",
+    "create_order_from_cart",
+    "add_order_items",
+    "clear_user_cart",
+    "get_order_by_id",
+    "get_user_orders",
+    "get_all_orders",
+    "update_order_status",
+    "can_cancel_order",
+    "revalidate_order_total",
 ]
