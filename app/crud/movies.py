@@ -1,4 +1,4 @@
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.movies import Director, Movie, Star
@@ -9,7 +9,7 @@ from app.schemas.movies import (
 )
 
 
-def _apply_filters(stmt, params: MovieFilterParams):
+def _apply_filters(stmt: Select, params: MovieFilterParams) -> Select:
     if params.year is not None:
         stmt = stmt.where(Movie.year == params.year)
 
@@ -38,7 +38,7 @@ def _apply_filters(stmt, params: MovieFilterParams):
     return stmt
 
 
-def _apply_sorting(stmt, params: MovieFilterParams):
+def _apply_sorting(stmt: Select, params: MovieFilterParams) -> Select:
     sort_columns = {
         MovieSortField.PRICE: Movie.price,
         MovieSortField.YEAR: Movie.year,
@@ -48,7 +48,7 @@ def _apply_sorting(stmt, params: MovieFilterParams):
     column = sort_columns[params.sort_by]
 
     if params.sort_order == MovieSortOrder.DESC:
-        column = column.desc()
+        column = column.desc()  # type: ignore[assignment]
 
     return stmt.order_by(column, Movie.id)
 

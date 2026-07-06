@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional, Union
+from typing import Optional, Union, Any
 
 import aioboto3
 from botocore.exceptions import (
@@ -8,6 +8,7 @@ from botocore.exceptions import (
     HTTPClientError,
     ConnectionError,
 )
+
 
 from app.core.config import settings
 from app.exceptions import MinioConnectionError, MinioFileUploadError
@@ -27,7 +28,7 @@ _public_session = aioboto3.Session(
 )
 
 
-def _get_public_client():
+def _get_public_client() -> Any:
     return _public_session.client("s3", endpoint_url=settings.STORAGE_PUBLIC_URL)
 
 
@@ -54,7 +55,7 @@ async def init_storage() -> None:
         raise MinioConnectionError(f"Failed to connect to MinIO storage: {str(e)}") from e
 
 
-async def ensure_bucket_exists(client, bucket_name: str) -> None:
+async def ensure_bucket_exists(client: Any, bucket_name: str) -> None:
     try:
         await client.head_bucket(Bucket=bucket_name)
     except ClientError as e:
@@ -66,7 +67,7 @@ async def ensure_bucket_exists(client, bucket_name: str) -> None:
             raise
 
 
-def _get_client(public: bool = False):
+def _get_client(public: bool = False) -> Any:
     endpoint = settings.STORAGE_PUBLIC_URL if public else settings.STORAGE_ENDPOINT_URL
     return _session.client("s3", endpoint_url=endpoint)
 

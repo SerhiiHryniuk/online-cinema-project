@@ -16,7 +16,7 @@ async def _delete_expired_activation_tokens() -> int:
             delete(ActivationTokenModel).where(ActivationTokenModel.expires_at < now_utc)
         )
         await session.commit()
-        return result.rowcount or 0
+        return result.rowcount or 0  # type: ignore[attr-defined]
 
 
 @celery_app.task(name="app.tasks.cleanup.delete_expired_activation_tokens")

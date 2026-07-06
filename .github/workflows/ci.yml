@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - develop
+  workflow_dispatch:
 
 jobs:
   lint:
@@ -25,3 +26,80 @@ jobs:
 
       - name: Run flake8
         run: flake8 .
+
+  typecheck:
+    name: Mypy Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run mypy
+        run: poetry run mypy app
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: test_secret_key_for_ci_only
+      ALGORITHM: HS256
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: test_db
+      POSTGRES_PORT: 5432
+      DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
+      REDIS_URL: redis://localhost:6379/0
+      STORAGE_ENDPOINT_URL: http://localhost:9000
+      STORAGE_PUBLIC_URL: http://localhost:9001
+      STORAGE_ACCESS_KEY: test_access_key
+      STORAGE_SECRET_KEY: test_secret_key
+      STORAGE_BUCKET_NAME: test-bucket
+      EMAIL_HOST: localhost
+      EMAIL_PORT: 1025
+      SUPERUSER_EMAIL: admin@test.com
+      SUPERUSER_PASSWORD: test_admin_password
+      CELERY_TASK_ALWAYS_EAGER: "True"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Create .env for Docker Compose
+        run: |
+          echo "POSTGRES_USER=test_user" >> .env
+          echo "POSTGRES_PASSWORD=test_password" >> .env
+          echo "POSTGRES_DB=test_db" >> .env
+          echo "POSTGRES_PORT=5432" >> .env
+          echo "REDIS_PORT=6379" >> .env
+          echo "MINIO_PORT=9000" >> .env
+          echo "MINIO_CONSOLE_PORT=9001" >> .env
+          echo "STORAGE_ACCESS_KEY=test_access_key" >> .env
+          echo "STORAGE_SECRET_KEY=test_secret_key" >> .env
+
+      - name: Start Backend Services (Postgres, Redis, MinIO, MailHog)
+        run: docker compose up -d --wait db redis minio mailhog
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run tests
+        run: poetry run pytest app/tests

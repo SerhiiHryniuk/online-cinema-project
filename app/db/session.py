@@ -1,5 +1,7 @@
+from typing import AsyncIterator
+
 from dotenv import load_dotenv
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from app.core.config import settings
 
@@ -18,6 +20,6 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
-async def get_db():
+async def get_db() -> AsyncIterator[AsyncSession]:
     async with AsyncSessionLocal() as db:
         yield db

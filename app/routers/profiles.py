@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
@@ -15,7 +15,7 @@ from app.storage.minio import delete_avatar, get_avatar_url, upload_avatar
 router = APIRouter()
 
 
-async def _build_response(profile) -> ProfileResponseSchema:
+async def _build_response(profile: Any) -> ProfileResponseSchema:
     response = ProfileResponseSchema.model_validate(profile)
     response.avatar_url = await get_avatar_url(profile.avatar)
     return response
@@ -85,7 +85,7 @@ async def update_my_profile(
         file_data = await profile_data.avatar.read()
         try:
             new_avatar_key = await upload_avatar(
-                str(user.id), file_data, profile_data.avatar.content_type
+                str(user.id), file_data, profile_data.avatar.content_type  # type: ignore[arg-type]
             )
         except MinioConnectionError:
             raise HTTPException(

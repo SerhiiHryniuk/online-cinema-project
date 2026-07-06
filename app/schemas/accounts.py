@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Any
 
 from pydantic import (
     BaseModel,
@@ -114,7 +114,7 @@ class UserAdminUpdateResponseSchema(UserRegistrationResponseSchema):
 
     @field_validator("group", mode="before")
     @classmethod
-    def transform_group_object(cls, v):
+    def transform_group_object(cls, v: Any) -> Any:
         if v and hasattr(v, "name"):
             if hasattr(v.name, "value"):
                 return v.name.value
