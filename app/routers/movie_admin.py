@@ -30,6 +30,7 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
     responses={
         403: {"description": "Forbidden - Not enough permissions."},
+        422: {"description": "Unprocessable - Invalid related IDs."},
     },
 )
 async def create_new_movie(
@@ -45,7 +46,14 @@ async def create_new_movie(
         ),
     ],
 ) -> MovieDetailSchema:
-    movie = await create_movie(db, payload)
+    try:
+        movie = await create_movie(db, payload)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(error),
+        )
+
     await db.commit()
     await db.refresh(movie)
 
@@ -61,6 +69,7 @@ async def create_new_movie(
     responses={
         403: {"description": "Forbidden - Not enough permissions."},
         404: {"description": "Not Found - Movie does not exist."},
+        422: {"description": "Unprocessable - Invalid related IDs."},
     },
 )
 async def update_existing_movie(
@@ -84,7 +93,14 @@ async def update_existing_movie(
             detail="Movie not found.",
         )
 
-    movie = await update_movie(db, movie, payload)
+    try:
+        movie = await update_movie(db, movie, payload)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(error),
+        )
+
     await db.commit()
     await db.refresh(movie)
 
