@@ -1,7 +1,9 @@
 from fastapi import APIRouter
 
 from app.routers.accounts import router as accounts_router
+from app.routers.certifications import router as certifications_router
 from app.routers.comments import router as comments_router
+from app.routers.directors import router as directors_router
 from app.routers.favorites import router as favorites_router
 from app.routers.genres import router as genres_router
 from app.routers.likes import router as likes_router
@@ -33,3 +35,11 @@ api_router.include_router(
 )
 api_router.include_router(genres_router, prefix="/genres", tags=["genres"])
 api_router.include_router(stars_router, prefix="/stars", tags=["stars"])
+api_router.include_router(
+    directors_router, prefix="/directors", tags=["directors"]
+)
+api_router.include_router(
+    certifications_router,
+    prefix="/certifications",
+    tags=["certifications"],
+)
