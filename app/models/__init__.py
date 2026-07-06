@@ -36,6 +36,11 @@ from app.models.interactions import (
     NotificationType,
     Rating,
 )
+from app.models.payments import (
+    Payment,
+    PaymentItem,
+    PaymentStatus,
+)
 
 __all__ = [
     "GenderEnum",
@@ -63,4 +68,7 @@ __all__ = [
     "Notification",
     "NotificationType",
     "Rating",
+    "Payment",
+    "PaymentItem",
+    "PaymentStatus",
 ]
