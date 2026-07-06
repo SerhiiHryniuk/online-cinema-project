@@ -4,11 +4,12 @@ from typing import Optional
 
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.models.orders import Order, OrderItem, OrderStatus
 from app.models.movies import Movie
 from app.models.carts import Cart, CartItem
+from app.models.interactions import Like, Rating, Favorite
 
 
 async def get_user_cart_with_items(db: AsyncSession, user_id: int) -> Cart | None:
@@ -38,19 +39,21 @@ async def get_user_purchased_movies(db: AsyncSession, user_id: int) -> list[int]
         .distinct()
     )
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    return result.scalars().all() # type: ignore
 
 
 async def get_user_pending_orders_with_movies(db: AsyncSession, user_id: int) -> list[tuple]:
     """Get user's pending orders with their movie IDs for duplicate checking."""
     stmt = (
-        select(Order)
+        select(Order, func.array_agg(OrderItem.movie_id).label('movie_ids'))
+        .join(OrderItem)
         .where(
             and_(
                 Order.user_id == user_id,
                 Order.status == OrderStatus.PENDING
             )
         )
+        .group_by(Order.id)
     )
     result = await db.execute(stmt)
     orders = result.scalars().all()
@@ -118,9 +121,9 @@ async def clear_user_cart(db: AsyncSession, user_id: int) -> None:
     cart = result.scalars().first()
 
     if cart:
-        stmt_items = select(CartItem).where(CartItem.cart_id == cart.id)
-        result_items = await db.execute(stmt_items)
-        cart_items = result_items.scalars().all()
+        stmt = select(CartItem).where(CartItem.cart_id == cart.id)
+        result = await db.execute(stmt)
+        cart_items = result.scalars().all()
 
         for item in cart_items:
             await db.delete(item)
@@ -149,7 +152,7 @@ async def get_user_orders(
     # Count total orders
     count_stmt = select(func.count(Order.id)).where(Order.user_id == user_id)
     count_result = await db.execute(count_stmt)
-    total = count_result.scalar() or 0
+    total = count_result.scalar()
 
     # Get orders with pagination
     offset = (page - 1) * per_page
@@ -161,9 +164,9 @@ async def get_user_orders(
         .limit(per_page)
     )
     result = await db.execute(stmt)
-    orders = list(result.scalars().all())
+    orders = result.scalars().all()
 
-    return orders, total
+    return orders, total # type: ignore
 
 
 async def get_all_orders(
@@ -197,7 +200,7 @@ async def get_all_orders(
     if where_clause is not None:
         count_stmt = count_stmt.where(where_clause)
     count_result = await db.execute(count_stmt)
-    total = count_result.scalar() or 0
+    total = count_result.scalar()
 
     # Get orders with pagination
     offset = (page - 1) * per_page
@@ -207,9 +210,9 @@ async def get_all_orders(
         stmt = stmt.where(where_clause)
 
     result = await db.execute(stmt)
-    orders = list(result.scalars().all())
+    orders = result.scalars().all()
 
-    return orders, total
+    return orders, total # type: ignore
 
 
 async def update_order_status(
