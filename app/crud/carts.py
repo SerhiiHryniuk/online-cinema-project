@@ -16,7 +16,11 @@ async def get_or_create_cart(
     stmt = (
         select(Cart)
         .where(Cart.user_id == user_id)
-        .options(selectinload(Cart.items).selectinload(CartItem.movie))
+        .options(
+            selectinload(Cart.items)
+            .selectinload(CartItem.movie)
+            .selectinload(Movie.genres)
+        )
     )
     cart = await db.scalar(stmt)
 

@@ -3,14 +3,21 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
 
 
+class GenreReadSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
 class MovieReadSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    title: str
+    name: str
     price: Decimal
-    genre: str
-    release_year: int
+    genres: list[GenreReadSchema]
+    year: int
 
 
 class CartItemCreateSchema(BaseModel):

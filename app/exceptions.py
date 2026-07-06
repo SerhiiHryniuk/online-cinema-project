@@ -27,7 +27,7 @@ class CartError(Exception):
 
 
 class CartNotFound(CartError):
-    def __init__(self, message="Cart not found"):
+    def __init__(self, message: str = "Cart not found") -> None:
         super().__init__(message)
 
 
@@ -36,5 +36,5 @@ class MovieError(Exception):
 
 
 class MovieNotFound(MovieError):
-    def __init__(self, message="Movie not found"):
+    def __init__(self, message: str = "Movie not found") -> None:
         super().__init__(message)
