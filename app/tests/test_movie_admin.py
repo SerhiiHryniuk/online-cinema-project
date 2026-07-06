@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import pytest
+
 from app.crud.movie_admin import (
     create_movie,
     delete_movie,
@@ -138,3 +140,81 @@ async def test_movie_has_purchases_true(db_session):
 
     has = await movie_has_purchases(db_session, movie.id)
     assert has is True
+
+
+async def test_create_movie_invalid_certification(db_session):
+    await _setup_refs(db_session)
+
+    payload = MovieCreateSchema(
+        name="Bad Cert",
+        year=2021,
+        time=120,
+        imdb=7.0,
+        votes=1000,
+        description="Movie with bad certification.",
+        price=Decimal("9.99"),
+        certification_id=999,
+        genre_ids=[],
+        star_ids=[],
+        director_ids=[],
+    )
+
+    with pytest.raises(ValueError):
+        await create_movie(db_session, payload)
+
+
+async def test_create_movie_invalid_genre(db_session):
+    cert, _, _ = await _setup_refs(db_session)
+
+    payload = MovieCreateSchema(
+        name="Bad Genre",
+        year=2021,
+        time=120,
+        imdb=7.0,
+        votes=1000,
+        description="Movie with bad genre.",
+        price=Decimal("9.99"),
+        certification_id=cert.id,
+        genre_ids=[999],
+        star_ids=[],
+        director_ids=[],
+    )
+
+    with pytest.raises(ValueError):
+        await create_movie(db_session, payload)
+
+
+async def test_create_movie_invalid_star(db_session):
+    cert, _, _ = await _setup_refs(db_session)
+
+    payload = MovieCreateSchema(
+        name="Bad Star",
+        year=2021,
+        time=120,
+        imdb=7.0,
+        votes=1000,
+        description="Movie with bad star.",
+        price=Decimal("9.99"),
+        certification_id=cert.id,
+        genre_ids=[],
+        star_ids=[999],
+        director_ids=[],
+    )
+
+    with pytest.raises(ValueError):
+        await create_movie(db_session, payload)
+
+
+async def test_update_movie_invalid_genre(db_session):
+    cert, genre, star = await _setup_refs(db_session)
+    movie = await create_movie(
+        db_session, _movie_payload(cert, genre, star)
+    )
+    await db_session.commit()
+
+    with pytest.raises(ValueError):
+        await update_movie(
+            db_session,
+            movie,
+            MovieUpdateSchema(genre_ids=[999]),
+        )
