@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
 
     BASE_URL: str = "http://127.0.0.1:8000"
+    STRIPE_SECRET_KEY: str
+    STRIPE_PUBLISHABLE_KEY: str
+    STRIPE_WEBHOOK_SECRET: str
     EMAIL_HOST: str = "mailhog"
     EMAIL_PORT: int = 1025
     EMAIL_HOST_USER: str = "testing@mail.com"
