@@ -47,7 +47,9 @@ async def list_certifications(
     status_code=status.HTTP_201_CREATED,
     responses={
         403: {"description": "Forbidden - Not enough permissions."},
-        409: {"description": "Conflict - Certification already exists."},
+        422: {
+            "description": "Unprocessable - Certification already exists."
+        },
     },
 )
 async def create_new_certification(
@@ -66,7 +68,7 @@ async def create_new_certification(
     existing = await get_certification_by_name(db, payload.name)
     if existing is not None:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Certification already exists.",
         )
 
@@ -86,7 +88,7 @@ async def create_new_certification(
     responses={
         403: {"description": "Forbidden - Not enough permissions."},
         404: {"description": "Not Found - Certification does not exist."},
-        409: {"description": "Conflict - Name already taken."},
+        422: {"description": "Unprocessable - Name already taken."},
     },
 )
 async def update_existing_certification(
@@ -115,7 +117,7 @@ async def update_existing_certification(
     duplicate = await get_certification_by_name(db, payload.name)
     if duplicate is not None and duplicate.id != certification_id:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Certification name already taken.",
         )
 

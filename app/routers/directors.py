@@ -47,7 +47,7 @@ async def list_directors(
     status_code=status.HTTP_201_CREATED,
     responses={
         403: {"description": "Forbidden - Not enough permissions."},
-        409: {"description": "Conflict - Director already exists."},
+        422: {"description": "Unprocessable - Director already exists."},
     },
 )
 async def create_new_director(
@@ -66,7 +66,7 @@ async def create_new_director(
     existing = await get_director_by_name(db, payload.name)
     if existing is not None:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Director already exists.",
         )
 
@@ -86,7 +86,7 @@ async def create_new_director(
     responses={
         403: {"description": "Forbidden - Not enough permissions."},
         404: {"description": "Not Found - Director does not exist."},
-        409: {"description": "Conflict - Director name already taken."},
+        422: {"description": "Unprocessable - Name already taken."},
     },
 )
 async def update_existing_director(
@@ -113,7 +113,7 @@ async def update_existing_director(
     duplicate = await get_director_by_name(db, payload.name)
     if duplicate is not None and duplicate.id != director_id:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Director name already taken.",
         )
 
