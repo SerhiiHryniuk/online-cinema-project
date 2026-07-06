@@ -8,7 +8,7 @@ from app.models import User, UserGroup, UserGroupEnum
 from app.security import hash_password
 
 
-async def seed_admin():
+async def seed_admin() -> None:
     async with AsyncSessionLocal() as db:
         stmt = select(User).join(UserGroup).where(UserGroup.name == UserGroupEnum.ADMIN)
         result = await db.execute(stmt)
@@ -23,7 +23,7 @@ async def seed_admin():
         admin = User(
             email=settings.SUPERUSER_EMAIL,
             hashed_password=hash_password(settings.SUPERUSER_PASSWORD),
-            group_id=admin_group.id,
+            group_id=admin_group.id,  # type: ignore[union-attr]
             is_active=True
         )
         db.add(admin)

@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import cast, Annotated
+from typing import Annotated
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -131,7 +131,7 @@ async def _activate_user_account(
     )
 
     now_utc = datetime.now(timezone.utc)
-    if not token_record or cast(datetime, token_record.expires_at).replace(tzinfo=timezone.utc) < now_utc:
+    if not token_record or token_record.expires_at.replace(tzinfo=timezone.utc) < now_utc:
         if token_record:
             await crud.delete_activation_token(db, token_record)
             await db.commit()
@@ -330,7 +330,7 @@ async def resend_activation(
 async def login(
     login_data: UserLoginSchema,
     db: Annotated[AsyncSession, Depends(get_db)]
-):
+) -> TokenResponseSchema:
     user = await crud.authenticate_user(
         db=db,
         email=login_data.email,
@@ -400,7 +400,7 @@ async def login(
 async def refresh(
     refresh_token_data: TokenRefreshSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
-):
+) -> TokenResponseSchema:
     try:
         decoded_data = decode_token(
             token=refresh_token_data.refresh_token,
@@ -422,7 +422,7 @@ async def refresh(
 
     await crud.delete_refresh_token(db, refresh_token_record)
 
-    user_id = int(decoded_data.get("sub"))
+    user_id = int(decoded_data.get("sub"))  # type: ignore[arg-type]
     user = await crud.get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(
@@ -501,7 +501,7 @@ async def _reset_password(
     token_record = await crud.get_password_reset_token_with_user_by_token(db, token=token)
 
     now_utc = datetime.now(timezone.utc)
-    if not token_record or cast(datetime, token_record.expires_at).replace(tzinfo=timezone.utc) < now_utc:
+    if not token_record or token_record.expires_at.replace(tzinfo=timezone.utc) < now_utc:
         if token_record:
             await crud.delete_password_reset_token(db, token_record)
             await db.commit()
@@ -656,8 +656,8 @@ async def change_user(
     db: Annotated[AsyncSession, Depends(get_db)],
     user_id: int,
     update_data: UserAdminUpdateRequestSchema,
-    current_user=Depends(require_admin)
-):
+    current_user: User = Depends(require_admin)
+) -> UserAdminUpdateResponseSchema:
     user = await crud.get_user_with_group_by_id(db, user_id)
 
     if not user:

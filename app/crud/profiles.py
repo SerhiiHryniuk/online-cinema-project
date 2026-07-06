@@ -1,3 +1,5 @@
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +19,6 @@ async def create_profile(db: AsyncSession, user_id: int) -> UserProfile:
     return profile
 
 
-async def update_profile(profile: UserProfile, **fields) -> None:
+async def update_profile(profile: UserProfile, **fields: Any) -> None:
     for field, value in fields.items():
         setattr(profile, field, value)
