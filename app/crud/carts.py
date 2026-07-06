@@ -41,9 +41,9 @@ async def get_user_cart(
 
 
 async def add_movie_to_cart(
-    db: AsyncSession,
-    cart_id: int,
-    movie_id: int,
+        db: AsyncSession,
+        cart_id: int,
+        movie_id: int,
 ) -> CartItem:
     movie = await db.get(Movie, movie_id)
     if not movie:
@@ -52,18 +52,19 @@ async def add_movie_to_cart(
     stmt = select(CartItem).where(
         CartItem.cart_id == cart_id,
         CartItem.movie_id == movie_id,
-    )
-    cart_item = await db.scalar(stmt)
+    ).options(selectinload(CartItem.movie))
 
+    cart_item = await db.scalar(stmt)
     if cart_item:
         return cart_item
 
     cart_item = CartItem(cart_id=cart_id, movie_id=movie_id)
     db.add(cart_item)
     await db.commit()
-    await db.refresh(cart_item, ("movie",))
 
-    return cart_item
+    stmt = select(CartItem).options(selectinload(CartItem.movie)).where(CartItem.id == cart_item.id)
+    result = await db.execute(stmt)
+    return result.scalar_one()
 
 
 async def remove_movie_from_cart(
