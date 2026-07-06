@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
@@ -17,7 +17,7 @@ router = APIRouter()
 async def get_my_cart(
         db: Annotated[AsyncSession, Depends(get_db)],
         current_user: Annotated[User, Depends(get_current_user)],
-):
+) -> CartReadSchema:
     return await crud.get_user_cart(db, current_user.id)
 
 
@@ -26,7 +26,7 @@ async def add_item_to_cart(
         movie_id: int,
         db: Annotated[AsyncSession, Depends(get_db)],
         current_user: Annotated[User, Depends(get_current_user)],
-):
+) -> CartReadSchema:
     is_purchased = await crud.is_movie_purchased(db, current_user.id, movie_id)
     if is_purchased:
         raise HTTPException(
@@ -61,11 +61,11 @@ async def remove_item_from_cart(
         movie_id: int,
         db: Annotated[AsyncSession, Depends(get_db)],
         current_user: Annotated[User, Depends(get_current_user)],
-):
+) -> CartReadSchema:
     cart = await crud.get_or_create_cart(db, current_user.id)
     try:
         await crud.remove_movie_from_cart(db, cart.id, movie_id)
-
+        await db.refresh(cart)
         return await crud.get_user_cart(db, current_user.id)
     except MovieNotFound as error:
         raise HTTPException(
@@ -78,7 +78,7 @@ async def remove_item_from_cart(
 async def clear_my_cart(
         db: Annotated[AsyncSession, Depends(get_db)],
         current_user: Annotated[User, Depends(get_current_user)],
-):
+) -> None:
     cart = await crud.get_or_create_cart(db, current_user.id)
     await crud.clear_cart(db, cart.id)
 
@@ -87,7 +87,7 @@ async def clear_my_cart(
 async def checkout_my_cart(
         db: Annotated[AsyncSession, Depends(get_db)],
         current_user: Annotated[User, Depends(get_current_user)],
-):
+) -> dict[str, Any]:
     try:
         order = await crud.checkout_cart(db, current_user.id)
 
@@ -99,13 +99,10 @@ async def checkout_my_cart(
         )
 
 
-@router.get(
-    "/user/{user_id}",
-    response_model=CartReadSchema,
-    dependencies=[Depends(allowed_roles_user("admin", "moderator"))],
-)
+@router.get("/user/{user_id}", response_model=CartReadSchema)
 async def admin_get_user_cart(
         user_id: int,
         db: Annotated[AsyncSession, Depends(get_db)],
-):
+        _: Annotated[User, Depends(allowed_roles_user("ADMIN", "MODERATOR"))],
+) -> CartReadSchema:
     return await crud.admin_get_user_cart(db, user_id)
