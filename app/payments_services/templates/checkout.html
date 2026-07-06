@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Checkout</title>
+    <style>
+        body { font-family: monospace; padding: 20px; line-height: 1.5; color: #000; background: #fff; }
+        .invoice { max-width: 400px; }
+        .item { display: flex; justify-content: space-between; margin: 5px 0; }
+        .total { font-weight: bold; border-top: 1px dashed #000; margin-top: 15px; padding-top: 5px; display: flex; justify-content: space-between; }
+        button { display: block; width: 100%; margin-top: 20px; padding: 10px; background: #000; color: #fff; border: 1px solid #000; cursor: pointer; font-family: monospace; font-size: 14px; }
+        button:disabled { background: #ccc; border-color: #ccc; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+<div class="invoice">
+    <h2>Order #{{ order.id }}</h2>
+    <hr style="border: 0; border-top: 1px dashed #000; margin-bottom: 15px;">
+
+    <div>
+        {% for item in order.items %}
+        <div class="item">
+            <span>Item #{{ item.id }} (x{{ getattr(item, 'quantity', 1) }})</span>
+            <span>{{ item.price }} USD</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="total">
+        <span>Total:</span>
+        <span>{{ order.total_amount }} USD</span>
+    </div>
+
+    <form id="payment-form">
+        <button type="submit" id="pay-button">Pay with Stripe</button>
+    </form>
+</div>
+
+<script>
+    document.getElementById('payment-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const button = document.getElementById('pay-button');
+        button.disabled = true;
+        button.innerText = 'Processing...';
+
+        try {
+            const response = await fetch('/checkout/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_id: {{ order.id }} })
+            });
+
+            if (!response.ok) throw new Error('Session generation failed');
+
+            const data = await response.json();
+            if (data.checkout_url) {
+                window.location.href = data.checkout_url;
+            }
+        } catch (error) {
+            alert(error.message);
+            button.disabled = false;
+            button.innerText = 'Pay with Stripe';
+        }
+    });
+</script>
+</body>
+</html>
