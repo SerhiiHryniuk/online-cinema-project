@@ -45,18 +45,26 @@ async def get_user_purchased_movies(db: AsyncSession, user_id: int) -> list[int]
 async def get_user_pending_orders_with_movies(db: AsyncSession, user_id: int) -> list[tuple]:
     """Get user's pending orders with their movie IDs for duplicate checking."""
     stmt = (
-        select(Order, func.array_agg(OrderItem.movie_id).label('movie_ids'))
-        .join(OrderItem)
+        select(Order)
         .where(
             and_(
                 Order.user_id == user_id,
                 Order.status == OrderStatus.PENDING
             )
         )
-        .group_by(Order.id)
     )
     result = await db.execute(stmt)
-    return result.all()
+    orders = result.scalars().all()
+    
+    pending_with_movies = []
+    for order in orders:
+        items_stmt = select(OrderItem).where(OrderItem.order_id == order.id)
+        items_result = await db.execute(items_stmt)
+        items = items_result.scalars().all()
+        movie_ids = [item.movie_id for item in items]
+        pending_with_movies.append((order, movie_ids))
+    
+    return pending_with_movies
 
 
 async def check_movies_available(db: AsyncSession, movie_ids: list[int]) -> tuple[list[int], list[int]]:
