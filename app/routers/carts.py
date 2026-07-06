@@ -18,7 +18,8 @@ async def get_my_cart(
         db: Annotated[AsyncSession, Depends(get_db)],
         current_user: Annotated[User, Depends(get_current_user)],
 ) -> CartReadSchema:
-    return await crud.get_user_cart(db, current_user.id)
+    cart = await crud.get_user_cart(db, current_user.id)
+    return CartReadSchema.model_validate(cart)
 
 
 @router.post("/me/items/{movie_id}", response_model=CartReadSchema)
@@ -47,8 +48,8 @@ async def add_item_to_cart(
 
     try:
         await crud.add_movie_to_cart(db, cart.id, movie_id)
-
-        return await crud.get_user_cart(db, current_user.id)
+        updated_cart = await crud.get_user_cart(db, current_user.id)
+        return CartReadSchema.model_validate(updated_cart)
     except MovieNotFound as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -66,7 +67,8 @@ async def remove_item_from_cart(
     try:
         await crud.remove_movie_from_cart(db, cart.id, movie_id)
         await db.refresh(cart)
-        return await crud.get_user_cart(db, current_user.id)
+        updated_cart = await crud.get_user_cart(db, current_user.id)
+        return CartReadSchema.model_validate(updated_cart)
     except MovieNotFound as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -90,7 +92,6 @@ async def checkout_my_cart(
 ) -> dict[str, Any]:
     try:
         order = await crud.checkout_cart(db, current_user.id)
-
         return {"message": "Payment successful", "order_id": order.id}
     except CartNotFound as error:
         raise HTTPException(
@@ -105,4 +106,5 @@ async def admin_get_user_cart(
         db: Annotated[AsyncSession, Depends(get_db)],
         _: Annotated[User, Depends(allowed_roles_user("ADMIN", "MODERATOR"))],
 ) -> CartReadSchema:
-    return await crud.admin_get_user_cart(db, user_id)
+    cart = await crud.admin_get_user_cart(db, user_id)
+    return CartReadSchema.model_validate(cart)
