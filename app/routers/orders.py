@@ -39,7 +39,6 @@ async def create_order(
 ) -> OrderResponseSchema:
     """Create an order from user's cart."""
     cart = await orders_crud.get_user_cart_with_items(db, user.id)
-
     if not cart or not cart.items:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
