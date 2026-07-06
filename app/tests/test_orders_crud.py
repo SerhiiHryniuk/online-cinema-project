@@ -1,5 +1,6 @@
 import pytest
 from decimal import Decimal
+from sqlalchemy import select
 
 from app.crud import orders as orders_crud
 from app.models.orders import Order, OrderStatus, OrderItem
@@ -114,7 +115,12 @@ async def test_add_order_items(db_session):
     expected_total = sum(m.price for m in movies[:3])
 
     assert order.total_amount == expected_total
-    assert len(order.items) == 3
+    
+    stmt = select(OrderItem).where(OrderItem.order_id == order.id)
+    result = await db_session.execute(stmt)
+    order_items = result.scalars().all()
+    assert len(order_items) == 3
+
 
 
 @pytest.mark.asyncio
@@ -178,14 +184,21 @@ async def test_get_user_orders_pagination(db_session):
     user, movies, cart = await setup_test_data(db_session)
 
     for i in range(15):
-        cart_items = [CartItem(cart_id=cart.id, movie_id=movies[i % 5].id)]
-        db_session.add_all(cart_items)
+        if i > 0:
+            stmt = select(CartItem).where(CartItem.cart_id == cart.id)
+            result = await db_session.execute(stmt)
+            items = result.scalars().all()
+            for item in items:
+                await db_session.delete(item)
+            await db_session.commit()
+
+        cart_item = CartItem(cart_id=cart.id, movie_id=movies[i % 5].id)
+        db_session.add(cart_item)
         await db_session.commit()
 
         cart_full = await orders_crud.get_user_cart_with_items(db_session, user.id)
         order = await orders_crud.create_order_from_cart(db_session, user.id)
         await orders_crud.add_order_items(db_session, order, cart_full.items)
-        await orders_crud.clear_user_cart(db_session, user.id)
         await db_session.commit()
 
     orders_page1, total = await orders_crud.get_user_orders(db_session, user.id, page=1, per_page=10)
@@ -303,6 +316,9 @@ async def test_get_all_orders(db_session):
     await db_session.commit()
 
     cert = Certification(name="PG")
+    db_session.add(cert)
+    await db_session.commit()
+
     movie = Movie(
         name="Test",
         year=2020,
@@ -313,7 +329,7 @@ async def test_get_all_orders(db_session):
         price=Decimal("10.00"),
         certification_id=cert.id,
     )
-    db_session.add_all([cert, movie])
+    db_session.add(movie)
     await db_session.commit()
 
     for user in [user1, user2]:
