@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any, Callable, Coroutine
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -40,8 +40,8 @@ async def get_current_user(
     return user
 
 
-def allowed_roles_user(*roles):
-    async def checker(user: Annotated[User, Depends(get_current_user)]):
+def allowed_roles_user(*roles: Any) -> Callable[[User], Coroutine[Any, Any, User]]:
+    async def checker(user: Annotated[User, Depends(get_current_user)]) -> User:
         if user.group.name not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

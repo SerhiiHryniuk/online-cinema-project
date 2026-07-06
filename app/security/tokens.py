@@ -1,4 +1,5 @@
 from datetime import timedelta, datetime, UTC
+from typing import Any
 
 import jwt
 
@@ -11,7 +12,7 @@ def _create_jwt_token(
     user_id: int,
     expires_delta: timedelta,
     token_type: str
-):
+) -> str:
     time_now = datetime.now(tz=UTC)
 
     token_data = {
@@ -52,7 +53,7 @@ def create_refresh_token(
     )
 
 
-def decode_token(token: str, token_type: str):
+def decode_token(token: str, token_type: str) -> dict[str, Any]:
     decoded_data = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
 
     if decoded_data["type"] != token_type:

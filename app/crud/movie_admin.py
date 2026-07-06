@@ -1,3 +1,5 @@
+from typing import Any
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -15,7 +17,7 @@ from app.schemas.movie_admin import MovieCreateSchema, MovieUpdateSchema
 
 async def _validate_ids(
     db: AsyncSession,
-    model,
+    model: Any,
     ids: list[int],
     label: str,
 ) -> list:

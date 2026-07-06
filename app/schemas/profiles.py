@@ -102,7 +102,7 @@ class ProfileUpdateRequestSchema(BaseModel):
         }
 
         try:
-            return cls(**provided_fields)
+            return cls(**provided_fields)  # type: ignore[arg-type]
         except ValidationError as error:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
