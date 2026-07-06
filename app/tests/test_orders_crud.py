@@ -115,12 +115,11 @@ async def test_add_order_items(db_session):
     expected_total = sum(m.price for m in movies[:3])
 
     assert order.total_amount == expected_total
-    
+
     stmt = select(OrderItem).where(OrderItem.order_id == order.id)
     result = await db_session.execute(stmt)
     order_items = result.scalars().all()
     assert len(order_items) == 3
-
 
 
 @pytest.mark.asyncio

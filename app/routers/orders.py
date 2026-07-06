@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, allowed_roles_user
 from app.db.session import get_db
 from app.models.accounts import User, UserGroupEnum
-from app.models.orders import Order, OrderStatus
+from app.models.orders import OrderStatus
 from app.models.interactions import Notification, NotificationType
 from app.crud import orders as orders_crud
 from app.schemas.orders import (
