@@ -4,12 +4,11 @@ from typing import Optional
 
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import selectinload
 
 from app.models.orders import Order, OrderItem, OrderStatus
 from app.models.movies import Movie
 from app.models.carts import Cart, CartItem
-from app.models.interactions import Like, Rating, Favorite
 
 
 async def get_user_cart_with_items(db: AsyncSession, user_id: int) -> Cart | None:
@@ -39,7 +38,7 @@ async def get_user_purchased_movies(db: AsyncSession, user_id: int) -> list[int]
         .distinct()
     )
     result = await db.execute(stmt)
-    return result.scalars().all()
+    return list(result.scalars().all())
 
 
 async def get_user_pending_orders_with_movies(db: AsyncSession, user_id: int) -> list[tuple]:
@@ -55,7 +54,7 @@ async def get_user_pending_orders_with_movies(db: AsyncSession, user_id: int) ->
     )
     result = await db.execute(stmt)
     orders = result.scalars().all()
-    
+
     pending_with_movies = []
     for order in orders:
         items_stmt = select(OrderItem).where(OrderItem.order_id == order.id)
@@ -63,7 +62,7 @@ async def get_user_pending_orders_with_movies(db: AsyncSession, user_id: int) ->
         items = items_result.scalars().all()
         movie_ids = [item.movie_id for item in items]
         pending_with_movies.append((order, movie_ids))
-    
+
     return pending_with_movies
 
 
@@ -119,9 +118,9 @@ async def clear_user_cart(db: AsyncSession, user_id: int) -> None:
     cart = result.scalars().first()
 
     if cart:
-        stmt = select(CartItem).where(CartItem.cart_id == cart.id)
-        result = await db.execute(stmt)
-        cart_items = result.scalars().all()
+        stmt_items = select(CartItem).where(CartItem.cart_id == cart.id)
+        result_items = await db.execute(stmt_items)
+        cart_items = result_items.scalars().all()
 
         for item in cart_items:
             await db.delete(item)
@@ -150,7 +149,7 @@ async def get_user_orders(
     # Count total orders
     count_stmt = select(func.count(Order.id)).where(Order.user_id == user_id)
     count_result = await db.execute(count_stmt)
-    total = count_result.scalar()
+    total = count_result.scalar() or 0
 
     # Get orders with pagination
     offset = (page - 1) * per_page
@@ -162,7 +161,7 @@ async def get_user_orders(
         .limit(per_page)
     )
     result = await db.execute(stmt)
-    orders = result.scalars().all()
+    orders = list(result.scalars().all())
 
     return orders, total
 
@@ -198,7 +197,7 @@ async def get_all_orders(
     if where_clause is not None:
         count_stmt = count_stmt.where(where_clause)
     count_result = await db.execute(count_stmt)
-    total = count_result.scalar()
+    total = count_result.scalar() or 0
 
     # Get orders with pagination
     offset = (page - 1) * per_page
@@ -208,7 +207,7 @@ async def get_all_orders(
         stmt = stmt.where(where_clause)
 
     result = await db.execute(stmt)
-    orders = result.scalars().all()
+    orders = list(result.scalars().all())
 
     return orders, total
 

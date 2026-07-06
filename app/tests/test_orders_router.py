@@ -7,7 +7,6 @@ import httpx
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.db.session import get_db
 from app.routers.orders import router as orders_router
 from app.security.tokens import create_access_token
