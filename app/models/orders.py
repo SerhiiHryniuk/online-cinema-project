@@ -16,6 +16,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.accounts import User
+    from app.models.payments import Payment, PaymentItem
     from app.models.movies import Movie
 
 
@@ -45,6 +46,7 @@ class Order(Base):
     )
 
     user: Mapped["User"] = relationship("User", back_populates="orders")
+    payments: Mapped[list["Payment"]] = relationship("Payment", back_populates="order")
     items: Mapped[list["OrderItem"]] = relationship(
         "OrderItem", back_populates="order", cascade="all, delete-orphan"
     )
@@ -69,6 +71,9 @@ class OrderItem(Base):
 
     order: Mapped["Order"] = relationship("Order", back_populates="items")
     movie: Mapped["Movie"] = relationship("Movie", back_populates="order_items")
+    payment_items: Mapped[list["PaymentItem"]] = relationship(
+        "PaymentItem", back_populates="order_item"
+    )
 
     def __repr__(self) -> str:
         return f"<OrderItem(id={self.id}, order_id={self.order_id}, movie_id={self.movie_id})>"
