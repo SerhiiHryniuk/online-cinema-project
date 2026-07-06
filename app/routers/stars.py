@@ -41,7 +41,7 @@ async def list_stars(
     status_code=status.HTTP_201_CREATED,
     responses={
         403: {"description": "Forbidden - Not enough permissions."},
-        409: {"description": "Conflict - Star already exists."},
+        422: {"description": "Unprocessable - Star already exists."},
     },
 )
 async def create_new_star(
@@ -60,7 +60,7 @@ async def create_new_star(
     existing = await get_star_by_name(db, payload.name)
     if existing is not None:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Star already exists.",
         )
 
@@ -80,7 +80,7 @@ async def create_new_star(
     responses={
         403: {"description": "Forbidden - Not enough permissions."},
         404: {"description": "Not Found - Star does not exist."},
-        409: {"description": "Conflict - Star name already taken."},
+        422: {"description": "Unprocessable - Star name already taken."},
     },
 )
 async def update_existing_star(
@@ -107,7 +107,7 @@ async def update_existing_star(
     duplicate = await get_star_by_name(db, payload.name)
     if duplicate is not None and duplicate.id != star_id:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Star name already taken.",
         )
 

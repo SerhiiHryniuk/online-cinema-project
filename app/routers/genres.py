@@ -62,7 +62,7 @@ async def list_genres(
     status_code=status.HTTP_201_CREATED,
     responses={
         403: {"description": "Forbidden - Not enough permissions."},
-        409: {"description": "Conflict - Genre already exists."},
+        422: {"description": "Unprocessable - Genre already exists."},
     },
 )
 async def create_new_genre(
@@ -81,7 +81,7 @@ async def create_new_genre(
     existing = await get_genre_by_name(db, payload.name)
     if existing is not None:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Genre already exists.",
         )
 
@@ -101,7 +101,7 @@ async def create_new_genre(
     responses={
         403: {"description": "Forbidden - Not enough permissions."},
         404: {"description": "Not Found - Genre does not exist."},
-        409: {"description": "Conflict - Genre name already taken."},
+        422: {"description": "Unprocessable - Genre name already taken."},
     },
 )
 async def update_existing_genre(
@@ -128,7 +128,7 @@ async def update_existing_genre(
     duplicate = await get_genre_by_name(db, payload.name)
     if duplicate is not None and duplicate.id != genre_id:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Genre name already taken.",
         )
 
