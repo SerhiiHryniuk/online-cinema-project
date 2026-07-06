@@ -23,6 +23,7 @@ if TYPE_CHECKING:
         RefreshTokenModel,
     )
     from app.models.orders import Order
+    from app.models.payments import Payment
     from app.models.carts import Cart
     from app.models.interactions import (
         Comment,
@@ -114,6 +115,10 @@ class User(Base):
 
     orders: Mapped[list["Order"]] = relationship(
         "Order", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    payments: Mapped[list["Payment"]] = relationship(
+        "Payment", back_populates="user",
     )
 
     cart: Mapped["Cart"] = relationship(
