@@ -10,6 +10,7 @@ from app.routers.likes import router as likes_router
 from app.routers.movie_admin import router as movie_admin_router
 from app.routers.movies import router as movies_router
 from app.routers.notifications import router as notifications_router
+from app.routers.orders import router as orders_router
 from app.routers.profiles import router as profiles_router
 from app.routers.ratings import router as ratings_router
 from app.routers.stars import router as stars_router
@@ -33,6 +34,7 @@ api_router.include_router(
 api_router.include_router(
     notifications_router, prefix="/notifications", tags=["notifications"]
 )
+api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
 api_router.include_router(genres_router, prefix="/genres", tags=["genres"])
 api_router.include_router(stars_router, prefix="/stars", tags=["stars"])
 api_router.include_router(
