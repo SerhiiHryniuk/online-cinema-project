@@ -20,8 +20,8 @@
     <div>
         {% for item in order.items %}
         <div class="item">
-            <span>Item #{{ item.id }} (x{{ getattr(item, 'quantity', 1) }})</span>
-            <span>{{ item.price }} USD</span>
+            <span>Movie #{{ item.movie_id }}</span>
+            <span>{{ item.price_at_order }} USD</span>
         </div>
         {% endfor %}
     </div>
