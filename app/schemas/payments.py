@@ -21,7 +21,6 @@ class PaymentItemResponseSchema(BaseModel):
 
     id: int
     item_id: int
-    quantity: PositiveInt
     price: NonNegativeFloat
 
 
@@ -41,3 +40,14 @@ class PaymentHistoryFilterSchema(BaseModel):
     status: Optional[str] = None
     date_from: Optional[datetime] = None
     date_to: Optional[datetime] = None
+    limit: Annotated[int, Field(ge=1, le=100)] = 20
+    offset: Annotated[int, Field(ge=0)] = 0
+
+
+class AdminPaymentFilterSchema(BaseModel):
+    user_id: Optional[PositiveInt] = None
+    status: Optional[str] = None
+    date_from: Optional[datetime] = None
+    date_to: Optional[datetime] = None
+    limit: Annotated[int, Field(ge=1, le=100)] = 20
+    offset: Annotated[int, Field(ge=0)] = 0
