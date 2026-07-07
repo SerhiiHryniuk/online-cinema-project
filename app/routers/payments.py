@@ -7,28 +7,26 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, allowed_roles_user
 from app.core.config import settings
 from app.db.session import get_db
 from app.payments_services import stripe_service, payment_service, payment_db
-from app.models import Order, User, PaymentStatus, Payment, PaymentItem
+from app.models import Order, User, UserGroupEnum, PaymentStatus, Payment, PaymentItem
 
 from app.schemas.payments import (
     CheckoutRequestSchema,
     CheckoutResponseSchema,
     PaymentResponseSchema,
     PaymentItemResponseSchema,
-    PaymentHistoryFilterSchema
+    PaymentHistoryFilterSchema,
+    AdminPaymentFilterSchema,
 )
 
-try:
-    from stripe import StripeError
-except ImportError:
-    from stripe.error import StripeError
+from stripe import SignatureVerificationError, StripeError
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="app/payments_services/templates")
 
 
 async def get_order_or_404(
@@ -58,8 +56,9 @@ async def get_payment_page(
         order: Order = Depends(get_order_or_404)
 ):
     return templates.TemplateResponse(
+        request,
         "checkout.html",
-        {"request": request, "order": order}
+        {"order": order}
     )
 
 
@@ -67,9 +66,11 @@ async def get_payment_page(
 async def create_checkout(
         checkout_data: CheckoutRequestSchema,
         request: Request,
+        current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
-        order: Order = Depends(get_order_or_404)
 ):
+    order = await get_order_or_404(checkout_data.order_id, current_user, db)
+
     if not order.items:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -104,9 +105,8 @@ async def create_checkout(
 
     items_payload = [
         {
-            "name": f"Product #{item.id}",
-            "price": item.price,
-            "quantity": int(getattr(item, "quantity", 1))
+            "name": f"Movie #{item.movie_id}",
+            "price": float(item.price_at_order),
         }
         for item in order.items
     ]
@@ -117,7 +117,8 @@ async def create_checkout(
             user_id=order.user_id,
             items_data=items_payload,
             success_url=success_url,
-            cancel_url=cancel_url
+            cancel_url=cancel_url,
+            attempt=existing_payment.id if existing_payment else 0,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -144,7 +145,7 @@ async def create_checkout(
         payment_item = PaymentItem(
             payment_id=payment.id,
             order_item_id=item.id,
-            price_at_payment=item.price
+            price_at_payment=item.price_at_order
         )
         db.add(payment_item)
 
@@ -179,11 +180,6 @@ async def stripe_webhook(
     payload = await request.body()
 
     try:
-        from stripe import SignatureVerificationError
-    except ImportError:
-        from stripe.error import SignatureVerificationError
-
-    try:
         event = stripe_service.construct_webhook_event(payload, stripe_signature, webhook_secret)
     except (ValueError, SignatureVerificationError):
         raise HTTPException(
@@ -203,6 +199,27 @@ async def stripe_webhook(
     return result
 
 
+def _map_payment_to_response(payment: Payment) -> PaymentResponseSchema:
+    items_mapped = [
+        PaymentItemResponseSchema(
+            id=item.id,
+            item_id=item.order_item_id,
+            price=item.price_at_payment,
+        )
+        for item in payment.items
+    ]
+
+    return PaymentResponseSchema(
+        id=payment.id,
+        order_id=payment.order_id,
+        amount=payment.amount,
+        status=payment.status,
+        external_payment_id=payment.external_payment_id,
+        created_at=payment.created_at,
+        items=items_mapped
+    )
+
+
 @router.get("/history/", response_model=List[PaymentResponseSchema])
 async def get_payment_history(
         filters: PaymentHistoryFilterSchema = Depends(),
@@ -219,47 +236,36 @@ async def get_payment_history(
         offset=filters.offset
     )
 
-    response_data = []
-    for p in payments:
-        items_mapped = []
-        for item in p.items:
-            items_mapped.append(
-                PaymentItemResponseSchema(
-                    id=item.id,
-                    item_id=item.order_item_id,
-                    price=item.price_at_payment,
-                    quantity=int(getattr(item.order_item, "quantity", 1))
-                )
-            )
+    return [_map_payment_to_response(p) for p in payments]
 
-        response_data.append(
-            PaymentResponseSchema(
-                id=p.id,
-                order_id=p.order_id,
-                amount=p.amount,
-                status=p.status,
-                external_payment_id=p.external_payment_id,
-                created_at=p.created_at,
-                items=items_mapped
-            )
-        )
 
-    return response_data
+@router.get("/admin/", response_model=List[PaymentResponseSchema])
+async def get_all_payments_admin(
+        filters: AdminPaymentFilterSchema = Depends(),
+        _current_user: User = Depends(
+            allowed_roles_user(UserGroupEnum.ADMIN, UserGroupEnum.MODERATOR)
+        ),
+        db: AsyncSession = Depends(get_db)
+):
+    payments = await payment_db.get_user_payments_history(
+        db=db,
+        user_id=filters.user_id,
+        status=filters.status,
+        date_from=filters.date_from,
+        date_to=filters.date_to,
+        limit=filters.limit,
+        offset=filters.offset
+    )
+
+    return [_map_payment_to_response(p) for p in payments]
 
 
 @router.get("/success/", response_model=PaymentResponseSchema)
 async def payment_success(
         session_id: str,
-        current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db)
 ):
     payment = await payment_db.get_payment_by_session_id(db, session_id)
-
-    if payment and payment.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payment transaction not found"
-        )
 
     if not payment or payment.status == PaymentStatus.PENDING:
         stripe_session = await stripe_service.retrieve_session(session_id)
@@ -271,50 +277,25 @@ async def payment_success(
             await payment_service.process_webhook_event(db, fake_event)
             payment = await payment_db.get_payment_by_session_id(db, session_id)
 
-    if not payment or payment.user_id != current_user.id:
+    if not payment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment transaction not found"
         )
 
-    items_mapped = [
-        PaymentItemResponseSchema(
-            id=item.id,
-            item_id=item.order_item_id,
-            price=item.price_at_payment,
-            quantity=int(getattr(item.order_item, "quantity", 1))
-        )
-        for item in payment.items
-    ]
-
-    return PaymentResponseSchema(
-        id=payment.id,
-        order_id=payment.order_id,
-        amount=payment.amount,
-        status=payment.status,
-        external_payment_id=payment.external_payment_id,
-        created_at=payment.created_at,
-        items=items_mapped
-    )
+    return _map_payment_to_response(payment)
 
 
 @router.get("/cancel/")
 async def payment_cancel(
         session_id: Optional[str] = None,
-        current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db)
 ):
     if session_id:
         payment = await payment_db.get_payment_by_session_id(db, session_id)
-        if payment:
-            if payment.user_id != current_user.id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied"
-                )
-            if payment.status == PaymentStatus.PENDING:
-                await payment_db.update_status(db, payment.id, PaymentStatus.CANCELED)
-                await db.commit()
-                return {"status": "cancelled", "message": "Payment was cancelled and marked as canceled"}
+        if payment and payment.status == PaymentStatus.PENDING:
+            await payment_db.update_status(db, payment.id, PaymentStatus.CANCELED)
+            await db.commit()
+            return {"status": "cancelled", "message": "Payment was cancelled and marked as canceled"}
 
     return {"status": "cancelled", "message": "Payment generation was cancelled"}

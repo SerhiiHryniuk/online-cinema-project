@@ -3,17 +3,23 @@ import json
 import stripe
 from typing import List, Dict, Any, Optional
 
+from app.core.config import settings
+
+stripe.api_key = settings.STRIPE_SECRET_KEY
+
+
 async def create_checkout_session(
     order_id: int,
     user_id: int,
     items_data: List[Dict[str, Any]],
     success_url: str,
     cancel_url: str,
-    currency: str = "usd"
+    currency: str = "usd",
+    attempt: int = 0,
 ) -> stripe.checkout.Session:
     payload_string = json.dumps(items_data, sort_keys=True)
     payload_hash = hashlib.sha256(payload_string.encode("utf-8")).hexdigest()[:16]
-    idempotency_key = f"checkout-order-{order_id}-{user_id}-{payload_hash}"
+    idempotency_key = f"checkout-order-{order_id}-{user_id}-{payload_hash}-{attempt}"
 
     line_items = []
     for item in items_data:

@@ -60,7 +60,7 @@ async def update_status(
 
 async def get_user_payments_history(
         db: AsyncSession,
-        user_id: int,
+        user_id: Optional[int] = None,
         status: Optional[PaymentStatus] = None,
         date_from: Optional[datetime] = None,
         date_to: Optional[datetime] = None,
@@ -69,10 +69,11 @@ async def get_user_payments_history(
 ) -> Sequence[Payment]:
     stmt = (
         select(Payment)
-        .filter(Payment.user_id == user_id)
         .options(selectinload(Payment.items).selectinload(PaymentItem.order_item))
     )
 
+    if user_id is not None:
+        stmt = stmt.filter(Payment.user_id == user_id)
     if status:
         stmt = stmt.filter(Payment.status == status)
     if date_from:
