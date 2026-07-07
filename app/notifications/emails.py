@@ -57,3 +57,9 @@ async def send_password_reset_complete_email(email: str, login_link: str) -> Non
     template = _env.get_template(settings.PASSWORD_COMPLETE_EMAIL_TEMPLATE_NAME)
     html_content = template.render(email=email, login_link=login_link)
     await _send_email(email, "Your Password Has Been Successfully Reset", html_content)
+
+
+async def send_payment_success_email(email: str, order_id: int, amount: str) -> None:
+    template = _env.get_template(settings.PAYMENT_SUCCESS_EMAIL_TEMPLATE_NAME)
+    html_content = template.render(order_id=order_id, amount=amount)
+    await _send_email(email, "Payment Successful", html_content)

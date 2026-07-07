@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
 
     BASE_URL: str = "http://127.0.0.1:8000"
+    STRIPE_SECRET_KEY: str = Field(default=...)
+    STRIPE_PUBLISHABLE_KEY: str = Field(default=...)
+    STRIPE_WEBHOOK_SECRET: str = Field(default=...)
     EMAIL_HOST: str = "mailhog"
     EMAIL_PORT: int = 1025
     EMAIL_HOST_USER: str = "testing@mail.com"
@@ -48,6 +51,7 @@ class Settings(BaseSettings):
     ACTIVATION_COMPLETE_EMAIL_TEMPLATE_NAME: str = "activation_complete.html"
     PASSWORD_EMAIL_TEMPLATE_NAME: str = "password_reset_request.html"
     PASSWORD_COMPLETE_EMAIL_TEMPLATE_NAME: str = "password_reset_complete.html"
+    PAYMENT_SUCCESS_EMAIL_TEMPLATE_NAME: str = "payment_success.html"
 
     SUPERUSER_EMAIL: str = Field(default=...)
     SUPERUSER_PASSWORD: str = Field(default=...)
