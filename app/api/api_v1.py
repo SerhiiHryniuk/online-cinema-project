@@ -13,11 +13,13 @@ from app.routers.notifications import router as notifications_router
 from app.routers.profiles import router as profiles_router
 from app.routers.ratings import router as ratings_router
 from app.routers.stars import router as stars_router
+from app.routers.carts import router as carts_router
 
 api_router = APIRouter()
 
 api_router.include_router(accounts_router, prefix="/accounts", tags=["accounts"])
 api_router.include_router(profiles_router, prefix="/profiles", tags=["profiles"])
+api_router.include_router(carts_router, prefix="/carts", tags=["carts"])
 api_router.include_router(
     favorites_router, prefix="/movies", tags=["favorites"]
 )
