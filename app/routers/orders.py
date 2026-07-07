@@ -110,10 +110,10 @@ async def create_order(
     status_code=status.HTTP_200_OK,
 )
 async def list_user_orders(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
     page: Annotated[int, Query(ge=1)] = 1,
     per_page: Annotated[int, Query(ge=1, le=100)] = 10,
-    db: Annotated[AsyncSession, Depends(get_db)] = Depends(),
-    user: Annotated[User, Depends(get_current_user)] = Depends(),
 ) -> OrderListResponseSchema:
     """Get user's orders with pagination."""
     orders, total = await orders_crud.get_user_orders(db, user.id, page, per_page)
@@ -207,15 +207,14 @@ async def cancel_order(
     },
 )
 async def list_all_orders(
+    admin_user: Annotated[User, Depends(allowed_roles_user(UserGroupEnum.ADMIN))],
+    db: Annotated[AsyncSession, Depends(get_db)],
     user_id: Annotated[int | None, Query()] = None,
     status_filter: Annotated[str | None, Query(alias="status")] = None,
     start_date: Annotated[datetime | None, Query()] = None,
     end_date: Annotated[datetime | None, Query()] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     per_page: Annotated[int, Query(ge=1, le=100)] = 10,
-    db: Annotated[AsyncSession, Depends(get_db)] = Depends(),
-    admin_user: Annotated[User, Depends(allowed_roles_user(UserGroupEnum.ADMIN))]
-    = Depends(),
 ) -> OrderListResponseSchema:
     """Get all orders for admin with filters."""
     orders, total = await orders_crud.get_all_orders(
