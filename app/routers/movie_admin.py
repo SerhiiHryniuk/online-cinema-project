@@ -11,6 +11,7 @@ from app.crud.movie_admin import (
     movie_has_purchases,
     update_movie,
 )
+from app.crud.carts import check_movie_in_any_cart
 from app.db.session import get_db
 from app.models.accounts import User, UserGroupEnum
 from app.schemas.movie_admin import (
@@ -149,6 +150,12 @@ async def delete_existing_movie(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Movie has purchases and cannot be deleted.",
+        )
+
+    if await check_movie_in_any_cart(db, movie_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete movie, it currently exists in user carts.",
         )
 
     await delete_movie(db, movie)

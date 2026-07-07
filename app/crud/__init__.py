@@ -24,6 +24,17 @@ from app.crud.profiles import (
     get_profile,
     update_profile,
 )
+from app.crud.carts import (
+    get_or_create_cart,
+    get_user_cart,
+    add_movie_to_cart,
+    remove_movie_from_cart,
+    clear_cart,
+    is_movie_purchased,
+    checkout_cart,
+    admin_get_user_cart,
+    check_movie_in_any_cart,
+)
 
 __all__ = [
     "activate_user",
@@ -48,4 +59,13 @@ __all__ = [
     "get_profile",
     "create_profile",
     "update_profile",
+    "get_or_create_cart",
+    "get_user_cart",
+    "add_movie_to_cart",
+    "remove_movie_from_cart",
+    "clear_cart",
+    "is_movie_purchased",
+    "checkout_cart",
+    "admin_get_user_cart",
+    "check_movie_in_any_cart",
 ]
