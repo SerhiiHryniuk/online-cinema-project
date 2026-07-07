@@ -9,6 +9,7 @@ from app.notifications.emails import (
     send_activation_email,
     send_password_reset_complete_email,
     send_password_reset_email,
+    send_payment_success_email,
 )
 
 
@@ -65,4 +66,18 @@ def send_password_reset_complete_email_task(self: Task, email: str, login_link: 
         asyncio.run(send_password_reset_complete_email(email, login_link))
     except Exception as error:
         logger.error(f"Failed to send password-reset-complete email to {email}: {error}")
+        raise self.retry(exc=error)
+
+
+@celery_app.task(
+    name="app.tasks.emails.send_payment_success_email_task",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60,
+)
+def send_payment_success_email_task(self: Task, email: str, order_id: int, amount: str) -> None:
+    try:
+        asyncio.run(send_payment_success_email(email, order_id, amount))
+    except Exception as error:
+        logger.error(f"Failed to send payment success email to {email}: {error}")
         raise self.retry(exc=error)
