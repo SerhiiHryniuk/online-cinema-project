@@ -4,12 +4,11 @@ from typing import Optional
 
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import selectinload
 
 from app.models.orders import Order, OrderItem, OrderStatus
 from app.models.movies import Movie
 from app.models.carts import Cart, CartItem
-from app.models.interactions import Like, Rating, Favorite
 
 
 async def get_user_cart_with_items(db: AsyncSession, user_id: int) -> Cart | None:
@@ -39,21 +38,20 @@ async def get_user_purchased_movies(db: AsyncSession, user_id: int) -> list[int]
         .distinct()
     )
     result = await db.execute(stmt)
-    return result.scalars().all() # type: ignore
+    return result.scalars().all()  # type: ignore
 
 
 async def get_user_pending_orders_with_movies(db: AsyncSession, user_id: int) -> list[tuple]:
     """Get user's pending orders with their movie IDs for duplicate checking."""
     stmt = (
-        select(Order, func.array_agg(OrderItem.movie_id).label('movie_ids'))
-        .join(OrderItem)
+        select(Order)
         .where(
             and_(
                 Order.user_id == user_id,
                 Order.status == OrderStatus.PENDING
             )
         )
-        .group_by(Order.id)
+        .distinct()
     )
     result = await db.execute(stmt)
     orders = result.scalars().all()
@@ -121,7 +119,7 @@ async def clear_user_cart(db: AsyncSession, user_id: int) -> None:
     cart = result.scalars().first()
 
     if cart:
-        stmt = select(CartItem).where(CartItem.cart_id == cart.id)
+        stmt = select(CartItem).where(CartItem.cart_id == cart.id)  # type: ignore
         result = await db.execute(stmt)
         cart_items = result.scalars().all()
 
@@ -166,7 +164,7 @@ async def get_user_orders(
     result = await db.execute(stmt)
     orders = result.scalars().all()
 
-    return orders, total # type: ignore
+    return orders, total  # type: ignore
 
 
 async def get_all_orders(
@@ -212,7 +210,7 @@ async def get_all_orders(
     result = await db.execute(stmt)
     orders = result.scalars().all()
 
-    return orders, total # type: ignore
+    return orders, total  # type: ignore
 
 
 async def update_order_status(
