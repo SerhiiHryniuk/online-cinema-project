@@ -12,7 +12,7 @@ from app.tasks.emails import send_payment_success_email_task
 logger = logging.getLogger(__name__)
 
 
-async def process_webhook_event(db: AsyncSession, event: dict) -> dict:
+async def process_webhook_event(db: AsyncSession, event: Any) -> dict:
     if not isinstance(event, dict):
         event = event.to_dict()
 

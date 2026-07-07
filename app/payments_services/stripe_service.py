@@ -3,6 +3,13 @@ import json
 import stripe
 from typing import List, Dict, Any, Optional
 
+
+from stripe.params.checkout import (
+    SessionCreateParamsLineItem,
+    SessionCreateParamsLineItemPriceData,
+    SessionCreateParamsLineItemPriceDataProductData,
+)
+
 from app.core.config import settings
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
@@ -21,17 +28,19 @@ async def create_checkout_session(
     payload_hash = hashlib.sha256(payload_string.encode("utf-8")).hexdigest()[:16]
     idempotency_key = f"checkout-order-{order_id}-{user_id}-{payload_hash}-{attempt}"
 
-    line_items = []
+    line_items: List[SessionCreateParamsLineItem] = []
     for item in items_data:
         quantity = int(item.get("quantity", 1))
+        product_data: SessionCreateParamsLineItemPriceDataProductData = {
+            "name": item["name"],
+        }
+        price_data: SessionCreateParamsLineItemPriceData = {
+            "currency": currency,
+            "unit_amount": int(round(float(item["price"]) * 100)),
+            "product_data": product_data,
+        }
         line_items.append({
-            "price_data": {
-                "currency": currency,
-                "unit_amount": int(round(float(item["price"]) * 100)),
-                "product_data": {
-                    "name": item["name"],
-                },
-            },
+            "price_data": price_data,
             "quantity": quantity,
         })
 
