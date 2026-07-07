@@ -73,6 +73,9 @@ jobs:
       SUPERUSER_EMAIL: admin@test.com
       SUPERUSER_PASSWORD: test_admin_password
       CELERY_TASK_ALWAYS_EAGER: "True"
+      STRIPE_SECRET_KEY: sk_test_your_stripe_secret_key
+      STRIPE_PUBLISHABLE_KEY: pk_test_your_stripe_publishable_key
+      STRIPE_WEBHOOK_SECRET: whsec_your_stripe_webhook_secret
 
     steps:
       - name: Checkout code
