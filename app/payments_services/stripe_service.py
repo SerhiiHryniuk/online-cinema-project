@@ -49,11 +49,13 @@ async def create_checkout_session(
     )
     return session
 
+
 async def retrieve_session(session_id: str) -> Optional[stripe.checkout.Session]:
     try:
         return await stripe.checkout.Session.retrieve_async(session_id)
     except stripe.error.StripeError:
         return None
+
 
 def construct_webhook_event(payload: bytes, sig_header: str, endpoint_secret: str) -> stripe.Event:
     return stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
