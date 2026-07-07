@@ -14,6 +14,7 @@ from app.routers.orders import router as orders_router
 from app.routers.profiles import router as profiles_router
 from app.routers.ratings import router as ratings_router
 from app.routers.stars import router as stars_router
+from app.routers.payments import router as payments_router
 from app.routers.carts import router as carts_router
 
 api_router = APIRouter()
@@ -46,4 +47,9 @@ api_router.include_router(
     certifications_router,
     prefix="/certifications",
     tags=["certifications"],
+)
+api_router.include_router(
+    payments_router,
+    prefix="/payments",
+    tags=["payments"]
 )

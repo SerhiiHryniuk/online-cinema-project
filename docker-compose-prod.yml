@@ -137,6 +137,17 @@ services:
       timeout: 5s
       retries: 5
 
+  stripe-cli:
+    image: stripe/stripe-cli:latest
+    container_name: cinema_stripe_cli_prod
+    restart: always
+    command: listen --api-key ${STRIPE_SECRET_KEY} --forward-to web:8000/api/v1/payments/webhook/ --log-level info
+    env_file:
+      - .env
+    depends_on:
+      web:
+        condition: service_started
+
 volumes:
   postgres_data_prod:
   minio_data_prod:

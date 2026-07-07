@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 class PaymentStatus(str, enum.Enum):
     PENDING = "pending"
     SUCCESSFUL = "successful"
+    FAILED = "failed"
     CANCELED = "canceled"
     REFUNDED = "refunded"
 
@@ -42,7 +43,8 @@ class Payment(Base):
         nullable=False
     )
     amount: Mapped[Decimal] = mapped_column(DECIMAL(10, 2), nullable=False)
-    external_payment_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    session_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True, index=True)
+    external_payment_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
 
     user: Mapped["User"] = relationship(back_populates="payments")
     order: Mapped["Order"] = relationship(back_populates="payments")
