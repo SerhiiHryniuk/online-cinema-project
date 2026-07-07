@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Header, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -54,7 +54,7 @@ async def get_order_or_404(
 async def get_payment_page(
         request: Request,
         order: Order = Depends(get_order_or_404)
-):
+) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "checkout.html",
@@ -68,7 +68,7 @@ async def create_checkout(
         request: Request,
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
-):
+) -> CheckoutResponseSchema:
     order = await get_order_or_404(checkout_data.order_id, current_user, db)
 
     if not order.items:
@@ -76,6 +76,13 @@ async def create_checkout(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot pay for an empty order"
         )
+
+    if order.total_amount is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order total amount is not set"
+        )
+    total_amount = order.total_amount
 
     stmt_existing = (
         select(Payment)
@@ -92,9 +99,13 @@ async def create_checkout(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Order has already been paid"
             )
-        if existing_payment.status == PaymentStatus.PENDING:
+        if existing_payment.status == PaymentStatus.PENDING and existing_payment.session_id:
             stripe_session = await stripe_service.retrieve_session(existing_payment.session_id)
-            if stripe_session and getattr(stripe_session, "status", None) == "open":
+            if (
+                stripe_session
+                and getattr(stripe_session, "status", None) == "open"
+                and stripe_session.url
+            ):
                 return CheckoutResponseSchema(
                     checkout_url=stripe_session.url,
                     session_id=existing_payment.session_id
@@ -132,13 +143,28 @@ async def create_checkout(
             detail="Payment gateway communication error"
         )
 
+    if not session.url:
+        logger.error(f"Stripe did not return a checkout URL for order {order.id}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Payment gateway did not return a checkout URL"
+        )
+
+    payment_intent_id: Optional[str] = None
+    if session.payment_intent:
+        payment_intent_id = (
+            session.payment_intent
+            if isinstance(session.payment_intent, str)
+            else session.payment_intent.id
+        )
+
     payment = await payment_db.create_pending_payment(
         db=db,
         order_id=order.id,
         user_id=order.user_id,
-        amount=order.total_amount,
+        amount=total_amount,
         session_id=session.id,
-        external_payment_id=session.payment_intent
+        external_payment_id=payment_intent_id
     )
 
     for item in order.items:
@@ -162,7 +188,7 @@ async def stripe_webhook(
         request: Request,
         stripe_signature: Optional[str] = Header(None, alias="Stripe-Signature"),
         db: AsyncSession = Depends(get_db)
-):
+) -> Dict[str, Any]:
     if not stripe_signature:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -204,7 +230,7 @@ def _map_payment_to_response(payment: Payment) -> PaymentResponseSchema:
         PaymentItemResponseSchema(
             id=item.id,
             item_id=item.order_item_id,
-            price=item.price_at_payment,
+            price=float(item.price_at_payment),
         )
         for item in payment.items
     ]
@@ -212,7 +238,7 @@ def _map_payment_to_response(payment: Payment) -> PaymentResponseSchema:
     return PaymentResponseSchema(
         id=payment.id,
         order_id=payment.order_id,
-        amount=payment.amount,
+        amount=float(payment.amount),
         status=payment.status,
         external_payment_id=payment.external_payment_id,
         created_at=payment.created_at,
@@ -225,7 +251,7 @@ async def get_payment_history(
         filters: PaymentHistoryFilterSchema = Depends(),
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db)
-):
+) -> List[PaymentResponseSchema]:
     payments = await payment_db.get_user_payments_history(
         db=db,
         user_id=current_user.id,
@@ -246,7 +272,7 @@ async def get_all_payments_admin(
             allowed_roles_user(UserGroupEnum.ADMIN, UserGroupEnum.MODERATOR)
         ),
         db: AsyncSession = Depends(get_db)
-):
+) -> List[PaymentResponseSchema]:
     payments = await payment_db.get_user_payments_history(
         db=db,
         user_id=filters.user_id,
@@ -264,7 +290,7 @@ async def get_all_payments_admin(
 async def payment_success(
         session_id: str,
         db: AsyncSession = Depends(get_db)
-):
+) -> PaymentResponseSchema:
     payment = await payment_db.get_payment_by_session_id(db, session_id)
 
     if not payment or payment.status == PaymentStatus.PENDING:
@@ -290,7 +316,7 @@ async def payment_success(
 async def payment_cancel(
         session_id: Optional[str] = None,
         db: AsyncSession = Depends(get_db)
-):
+) -> Dict[str, str]:
     if session_id:
         payment = await payment_db.get_payment_by_session_id(db, session_id)
         if payment and payment.status == PaymentStatus.PENDING:
