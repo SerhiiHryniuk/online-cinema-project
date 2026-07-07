@@ -20,3 +20,21 @@ class MinioConnectionError(BaseAppError):
 
 class MinioFileUploadError(BaseAppError):
     pass
+
+
+class CartError(Exception):
+    pass
+
+
+class CartNotFound(CartError):
+    def __init__(self, message: str = "Cart not found") -> None:
+        super().__init__(message)
+
+
+class MovieError(Exception):
+    pass
+
+
+class MovieNotFound(MovieError):
+    def __init__(self, message: str = "Movie not found") -> None:
+        super().__init__(message)
