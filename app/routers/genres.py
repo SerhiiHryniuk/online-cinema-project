@@ -1,11 +1,11 @@
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_genre_repo
-from app.crud.movies import _apply_filters, _apply_sorting
+from app.api.deps import get_genre_repo, get_movie_repo
+from app.repositories.movies import MovieRepository
 from app.db.session import get_db
 from app.models.movies import Movie, movie_genres
 from app.repositories.genres import GenreRepository
@@ -158,6 +158,7 @@ async def list_genre_movies(
     genre_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
     genres: Annotated[GenreRepository, Depends(get_genre_repo)],
+    movies: Annotated[MovieRepository, Depends(get_movie_repo)],
     page: Annotated[int, Query(ge=1)] = 1,
     per_page: Annotated[int, Query(ge=1, le=100)] = 10,
     year: Annotated[Optional[int], Query()] = None,
@@ -175,12 +176,8 @@ async def list_genre_movies(
         )
 
     params = MovieFilterParams(
-        year=year,
-        min_imdb=min_imdb,
-        max_imdb=max_imdb,
-        search=search,
-        sort_by=sort_by,
-        sort_order=sort_order,
+        year=year, min_imdb=min_imdb, max_imdb=max_imdb,
+        search=search, sort_by=sort_by, sort_order=sort_order,
     )
 
     base_stmt = (
@@ -188,15 +185,10 @@ async def list_genre_movies(
         .join(movie_genres, Movie.id == movie_genres.c.movie_id)
         .where(movie_genres.c.genre_id == genre_id)
     )
-    filtered_stmt = _apply_filters(base_stmt, params)
 
-    count_stmt = select(func.count()).select_from(
-        filtered_stmt.order_by(None).subquery()
-    )
-    total_result = await db.execute(count_stmt)
-    total = total_result.scalar_one()
+    total = await movies.count_filtered(base_stmt, params)
+    sorted_stmt = movies.build_filtered_sorted_stmt(base_stmt, params)
 
-    sorted_stmt = _apply_sorting(filtered_stmt, params)
     offset = (page - 1) * per_page
     page_stmt = sorted_stmt.offset(offset).limit(per_page)
 
@@ -206,8 +198,5 @@ async def list_genre_movies(
 
     return MovieListResponseSchema(
         items=[MovieListItemSchema.model_validate(m) for m in items],
-        total=total,
-        page=page,
-        per_page=per_page,
-        total_pages=total_pages,
+        total=total, page=page, per_page=per_page, total_pages=total_pages,
     )
