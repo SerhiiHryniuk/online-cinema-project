@@ -10,13 +10,15 @@ from app import crud
 from app.db.session import get_db
 from app.models import User
 from app.repositories.certifications import CertificationRepository
+from app.repositories.comments import CommentRepository
 from app.repositories.directors import DirectorRepository
 from app.repositories.favorites import FavoriteRepository
 from app.repositories.genres import GenreRepository
 from app.repositories.movies import MovieRepository
+from app.repositories.notifications import NotificationRepository
 from app.repositories.stars import StarRepository
 from app.security.tokens import decode_token
-
+from app.services.comments import CommentService
 
 bearer_scheme = HTTPBearer()
 
@@ -92,3 +94,22 @@ async def get_favorite_repo(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> FavoriteRepository:
     return FavoriteRepository(db)
+
+
+async def get_comment_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> CommentRepository:
+    return CommentRepository(db)
+
+
+async def get_notification_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> NotificationRepository:
+    return NotificationRepository(db)
+
+
+async def get_comment_service(
+    comments: Annotated[CommentRepository, Depends(get_comment_repo)],
+    notifications: Annotated[NotificationRepository, Depends(get_notification_repo)],
+) -> CommentService:
+    return CommentService(comments, notifications)

@@ -3,14 +3,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
-from app.crud.notifications import (
-    get_notification_by_id,
-    get_user_notifications,
-    mark_notification_read,
-)
+from app.api.deps import get_current_user, get_notification_repo
 from app.db.session import get_db
 from app.models.accounts import User
+from app.repositories.notifications import NotificationRepository
 from app.schemas.comments import NotificationResponseSchema
 
 router = APIRouter()
@@ -24,16 +20,14 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
 )
 async def list_notifications(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    notifications: Annotated[NotificationRepository, Depends(get_notification_repo)],
     user: Annotated[User, Depends(get_current_user)],
     unread_only: Annotated[bool, Query()] = False,
 ) -> list[NotificationResponseSchema]:
-    notifications = await get_user_notifications(
-        db, user.id, unread_only
-    )
+    items = await notifications.get_user_notifications(user.id, unread_only)
     return [
         NotificationResponseSchema.model_validate(item)
-        for item in notifications
+        for item in items
     ]
 
 
@@ -51,9 +45,10 @@ async def list_notifications(
 async def read_notification(
     notification_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
+    notifications: Annotated[NotificationRepository, Depends(get_notification_repo)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> NotificationResponseSchema:
-    notification = await get_notification_by_id(db, notification_id)
+    notification = await notifications.get_by_id(notification_id)
     if notification is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -66,7 +61,7 @@ async def read_notification(
             detail="This notification does not belong to you.",
         )
 
-    await mark_notification_read(db, notification)
+    await notifications.mark_read(notification)
     await db.commit()
     await db.refresh(notification)
 
