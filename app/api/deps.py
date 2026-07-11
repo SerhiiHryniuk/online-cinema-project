@@ -9,7 +9,10 @@ from starlette import status
 from app import crud
 from app.db.session import get_db
 from app.models import User
+from app.repositories.genres import GenreRepository
+from app.repositories.stars import StarRepository
 from app.security.tokens import decode_token
+
 
 bearer_scheme = HTTPBearer()
 
@@ -49,3 +52,15 @@ def allowed_roles_user(*roles: Any) -> Callable[[User], Coroutine[Any, Any, User
             )
         return user
     return checker
+
+
+async def get_star_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> StarRepository:
+    return StarRepository(db)
+
+async def get_genre_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> GenreRepository:
+    return GenreRepository(db)
+

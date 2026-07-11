@@ -1,20 +1,13 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import allowed_roles_user
-from app.crud.stars import (
-    create_star,
-    delete_star,
-    get_all_stars,
-    get_star_by_id,
-    get_star_by_name,
-    update_star,
-)
-from app.db.session import get_db
+from app.api.deps import allowed_roles_user, get_star_repo
 from app.models.accounts import User, UserGroupEnum
+from app.repositories.stars import StarRepository
+
 from app.schemas.stars import StarCreateSchema, StarSchema
+
 
 router = APIRouter()
 
@@ -27,10 +20,10 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
 )
 async def list_stars(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    stars: Annotated[StarRepository, Depends(get_star_repo)],
 ) -> list[StarSchema]:
-    stars = await get_all_stars(db)
-    return [StarSchema.model_validate(star) for star in stars]
+    all_stars = await stars.get_all()
+    return [StarSchema.model_validate(star) for star in all_stars]
 
 
 @router.post(
@@ -46,7 +39,7 @@ async def list_stars(
 )
 async def create_new_star(
     payload: StarCreateSchema,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    stars: Annotated[StarRepository, Depends(get_star_repo)],
     user: Annotated[
         User,
         Depends(
@@ -57,16 +50,16 @@ async def create_new_star(
         ),
     ],
 ) -> StarSchema:
-    existing = await get_star_by_name(db, payload.name)
+    existing = await stars.get_by_name(payload.name)
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Star already exists.",
         )
 
-    star = await create_star(db, payload.name)
-    await db.commit()
-    await db.refresh(star)
+    star = await stars.create(payload.name)
+    await stars.db.commit()
+    await stars.db.refresh(star)
 
     return StarSchema.model_validate(star)
 
@@ -86,7 +79,7 @@ async def create_new_star(
 async def update_existing_star(
     star_id: int,
     payload: StarCreateSchema,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    stars: Annotated[StarRepository, Depends(get_star_repo)],
     user: Annotated[
         User,
         Depends(
@@ -97,23 +90,23 @@ async def update_existing_star(
         ),
     ],
 ) -> StarSchema:
-    star = await get_star_by_id(db, star_id)
+    star = await stars.get_by_id(star_id)
     if star is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Star not found.",
         )
 
-    duplicate = await get_star_by_name(db, payload.name)
+    duplicate = await stars.get_by_name(payload.name)
     if duplicate is not None and duplicate.id != star_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Star name already taken.",
         )
 
-    star = await update_star(db, star, payload.name)
-    await db.commit()
-    await db.refresh(star)
+    star = await stars.update(star, payload.name)
+    await stars.db.commit()
+    await stars.db.refresh(star)
 
     return StarSchema.model_validate(star)
 
@@ -130,7 +123,7 @@ async def update_existing_star(
 )
 async def delete_existing_star(
     star_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    stars: Annotated[StarRepository, Depends(get_star_repo)],
     user: Annotated[
         User,
         Depends(
@@ -141,12 +134,12 @@ async def delete_existing_star(
         ),
     ],
 ) -> None:
-    star = await get_star_by_id(db, star_id)
+    star = await stars.get_by_id(star_id)
     if star is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Star not found.",
         )
 
-    await delete_star(db, star)
-    await db.commit()
+    await stars.delete(star)
+    await stars.db.commit()
