@@ -17,6 +17,7 @@ from app.repositories.genres import GenreRepository
 from app.repositories.likes import LikeRepository
 from app.repositories.movies import MovieRepository
 from app.repositories.notifications import NotificationRepository
+from app.repositories.ratings import RatingRepository
 from app.repositories.stars import StarRepository
 from app.security.tokens import decode_token
 from app.services.comments import CommentService
@@ -120,3 +121,9 @@ async def get_like_repo(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LikeRepository:
     return LikeRepository(db)
+
+
+async def get_rating_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> RatingRepository:
+    return RatingRepository(db)

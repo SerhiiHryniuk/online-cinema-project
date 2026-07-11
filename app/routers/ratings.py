@@ -3,15 +3,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
-from app.crud.movies import get_movie_by_id
-from app.crud.ratings import (
-    get_movie_rating_summary,
-    remove_rating,
-    set_rating,
-)
+from app.api.deps import get_current_user, get_movie_repo, get_rating_repo
 from app.db.session import get_db
 from app.models.accounts import User
+from app.repositories.movies import MovieRepository
+from app.repositories.ratings import RatingRepository
 from app.schemas.ratings import (
     MovieRatingSummarySchema,
     RatingRequestSchema,
@@ -35,16 +31,18 @@ async def set_movie_rating(
     movie_id: int,
     payload: RatingRequestSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
+    ratings: Annotated[RatingRepository, Depends(get_rating_repo)],
+    movies: Annotated[MovieRepository, Depends(get_movie_repo)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> RatingResponseSchema:
-    movie = await get_movie_by_id(db, movie_id)
+    movie = await movies.get_by_id(movie_id)
     if movie is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Movie not found.",
         )
 
-    rating = await set_rating(db, user.id, movie_id, payload.score)
+    rating = await ratings.set_rating(user.id, movie_id, payload.score)
     await db.commit()
     await db.refresh(rating)
 
@@ -63,9 +61,10 @@ async def set_movie_rating(
 async def delete_movie_rating(
     movie_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
+    ratings: Annotated[RatingRepository, Depends(get_rating_repo)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> None:
-    removed = await remove_rating(db, user.id, movie_id)
+    removed = await ratings.remove_rating(user.id, movie_id)
     if not removed:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -84,7 +83,7 @@ async def delete_movie_rating(
 )
 async def get_movie_rating(
     movie_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    ratings: Annotated[RatingRepository, Depends(get_rating_repo)],
 ) -> MovieRatingSummarySchema:
-    average, count = await get_movie_rating_summary(db, movie_id)
+    average, count = await ratings.get_movie_rating_summary(movie_id)
     return MovieRatingSummarySchema(average=average, count=count)
