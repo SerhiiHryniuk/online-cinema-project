@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.models import Payment, PaymentItem, PaymentStatus
+from app.models import Order, Payment, PaymentItem, PaymentStatus
 
 
 async def get_payment_by_session_id(db: AsyncSession, session_id: str) -> Optional[Payment]:
@@ -56,6 +56,43 @@ async def update_status(
             payment.session_id = session_id
         await db.flush()
     return payment
+
+
+async def get_payment_by_session_id_locked(db: AsyncSession, session_id: str) -> Optional[Payment]:
+    stmt = select(Payment).filter(Payment.session_id == session_id).with_for_update()
+    result = await db.execute(stmt)
+    return result.unique().scalar_one_or_none()
+
+
+async def get_payment_by_external_id_locked(db: AsyncSession, external_payment_id: str) -> Optional[Payment]:
+    stmt = select(Payment).filter(
+        Payment.external_payment_id == external_payment_id
+    ).with_for_update()
+    result = await db.execute(stmt)
+    return result.unique().scalar_one_or_none()
+
+
+async def get_order_locked(db: AsyncSession, order_id: int) -> Optional[Order]:
+    stmt = select(Order).filter(Order.id == order_id).with_for_update()
+    result = await db.execute(stmt)
+    return result.unique().scalar_one_or_none()
+
+
+async def get_order_locked_with_relations(db: AsyncSession, order_id: int) -> Optional[Order]:
+    stmt = (
+        select(Order)
+        .filter(Order.id == order_id)
+        .options(selectinload(Order.items), selectinload(Order.user))
+        .with_for_update()
+    )
+    result = await db.execute(stmt)
+    return result.unique().scalar_one_or_none()
+
+
+async def get_payment_items(db: AsyncSession, payment_id: int) -> Sequence[PaymentItem]:
+    stmt = select(PaymentItem).filter(PaymentItem.payment_id == payment_id)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
 async def get_user_payments_history(
