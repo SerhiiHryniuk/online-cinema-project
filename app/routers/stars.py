@@ -2,8 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import allowed_roles_user, get_star_repo
-from app.models.accounts import User, UserGroupEnum
+from app.api.deps import get_star_repo
 from app.repositories.stars import StarRepository
 
 from app.schemas.stars import StarCreateSchema, StarSchema
@@ -40,15 +39,6 @@ async def list_stars(
 async def create_new_star(
     payload: StarCreateSchema,
     stars: Annotated[StarRepository, Depends(get_star_repo)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
 ) -> StarSchema:
     existing = await stars.get_by_name(payload.name)
     if existing is not None:
@@ -80,15 +70,6 @@ async def update_existing_star(
     star_id: int,
     payload: StarCreateSchema,
     stars: Annotated[StarRepository, Depends(get_star_repo)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
 ) -> StarSchema:
     star = await stars.get_by_id(star_id)
     if star is None:
@@ -124,15 +105,6 @@ async def update_existing_star(
 async def delete_existing_star(
     star_id: int,
     stars: Annotated[StarRepository, Depends(get_star_repo)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
 ) -> None:
     star = await stars.get_by_id(star_id)
     if star is None:

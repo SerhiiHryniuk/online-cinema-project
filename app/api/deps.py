@@ -9,6 +9,7 @@ from starlette import status
 from app import crud
 from app.db.session import get_db
 from app.models import User
+from app.repositories.directors import DirectorRepository
 from app.repositories.genres import GenreRepository
 from app.repositories.stars import StarRepository
 from app.security.tokens import decode_token
@@ -59,8 +60,14 @@ async def get_star_repo(
 ) -> StarRepository:
     return StarRepository(db)
 
+
 async def get_genre_repo(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> GenreRepository:
     return GenreRepository(db)
 
+
+async def get_director_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> DirectorRepository:
+    return DirectorRepository(db)

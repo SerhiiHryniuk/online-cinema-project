@@ -4,10 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import allowed_roles_user, get_genre_repo
+from app.api.deps import get_genre_repo
 from app.crud.movies import _apply_filters, _apply_sorting
 from app.db.session import get_db
-from app.models.accounts import User, UserGroupEnum
 from app.models.movies import Movie, movie_genres
 from app.repositories.genres import GenreRepository
 from app.schemas.genres import (
@@ -62,15 +61,6 @@ async def create_new_genre(
     payload: GenreCreateSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
     genres: Annotated[GenreRepository, Depends(get_genre_repo)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
 ) -> GenreSchema:
     existing = await genres.get_by_name(payload.name)
     if existing is not None:
@@ -103,15 +93,6 @@ async def update_existing_genre(
     payload: GenreCreateSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
     genres: Annotated[GenreRepository, Depends(get_genre_repo)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
 ) -> GenreSchema:
     genre = await genres.get_by_id(genre_id)
     if genre is None:
@@ -148,15 +129,6 @@ async def delete_existing_genre(
     genre_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
     genres: Annotated[GenreRepository, Depends(get_genre_repo)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
 ) -> None:
     genre = await genres.get_by_id(genre_id)
     if genre is None:
@@ -211,8 +183,6 @@ async def list_genre_movies(
         sort_order=sort_order,
     )
 
-    # NOTE: still using crud/movies.py helpers here — this becomes
-    # MovieRepository's job once that gets its own repository conversion.
     base_stmt = (
         select(Movie)
         .join(movie_genres, Movie.id == movie_genres.c.movie_id)
