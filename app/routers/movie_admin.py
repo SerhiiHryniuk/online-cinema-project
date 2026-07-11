@@ -3,17 +3,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import allowed_roles_user
-from app.crud.movie_admin import (
-    create_movie,
-    delete_movie,
-    get_movie_admin,
-    movie_has_purchases,
-    update_movie,
-)
+from app.api.deps import get_movie_repo
 from app.crud.carts import check_movie_in_any_cart
 from app.db.session import get_db
-from app.models.accounts import User, UserGroupEnum
+from app.repositories.movies import MovieRepository
 from app.schemas.movie_admin import (
     MovieCreateSchema,
     MovieUpdateSchema,
@@ -37,18 +30,10 @@ router = APIRouter()
 async def create_new_movie(
     payload: MovieCreateSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
+    movies: Annotated[MovieRepository, Depends(get_movie_repo)],
 ) -> MovieDetailSchema:
     try:
-        movie = await create_movie(db, payload)
+        movie = await movies.create(payload)
     except ValueError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -77,17 +62,9 @@ async def update_existing_movie(
     movie_id: int,
     payload: MovieUpdateSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
+    movies: Annotated[MovieRepository, Depends(get_movie_repo)],
 ) -> MovieDetailSchema:
-    movie = await get_movie_admin(db, movie_id)
+    movie = await movies.get_admin(movie_id)
     if movie is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -95,7 +72,7 @@ async def update_existing_movie(
         )
 
     try:
-        movie = await update_movie(db, movie, payload)
+        movie = await movies.update(movie, payload)
     except ValueError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -129,24 +106,16 @@ async def update_existing_movie(
 async def delete_existing_movie(
     movie_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
+    movies: Annotated[MovieRepository, Depends(get_movie_repo)],
 ) -> None:
-    movie = await get_movie_admin(db, movie_id)
+    movie = await movies.get_admin(movie_id)
     if movie is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Movie not found.",
         )
 
-    if await movie_has_purchases(db, movie_id):
+    if await movies.has_purchases(movie_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Movie has purchases and cannot be deleted.",
@@ -158,5 +127,5 @@ async def delete_existing_movie(
             detail="Cannot delete movie, it currently exists in user carts.",
         )
 
-    await delete_movie(db, movie)
+    await movies.delete(movie)
     await db.commit()

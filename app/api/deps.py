@@ -11,7 +11,9 @@ from app.db.session import get_db
 from app.models import User
 from app.repositories.certifications import CertificationRepository
 from app.repositories.directors import DirectorRepository
+from app.repositories.favorites import FavoriteRepository
 from app.repositories.genres import GenreRepository
+from app.repositories.movies import MovieRepository
 from app.repositories.stars import StarRepository
 from app.security.tokens import decode_token
 
@@ -78,3 +80,15 @@ async def get_certification_repo(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CertificationRepository:
     return CertificationRepository(db)
+
+
+async def get_movie_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MovieRepository:
+    return MovieRepository(db)
+
+
+async def get_favorite_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> FavoriteRepository:
+    return FavoriteRepository(db)
