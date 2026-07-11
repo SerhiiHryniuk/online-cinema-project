@@ -3,11 +3,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
-from app.crud.likes import count_movie_likes, remove_like, set_like
-from app.crud.movies import get_movie_by_id
+from app.api.deps import get_current_user, get_like_repo, get_movie_repo
 from app.db.session import get_db
 from app.models.accounts import User
+from app.repositories.likes import LikeRepository
+from app.repositories.movies import MovieRepository
 from app.schemas.likes import (
     LikeRequestSchema,
     LikeResponseSchema,
@@ -31,16 +31,18 @@ async def set_movie_like(
     movie_id: int,
     payload: LikeRequestSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
+    likes: Annotated[LikeRepository, Depends(get_like_repo)],
+    movies: Annotated[MovieRepository, Depends(get_movie_repo)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> LikeResponseSchema:
-    movie = await get_movie_by_id(db, movie_id)
+    movie = await movies.get_by_id(movie_id)
     if movie is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Movie not found.",
         )
 
-    like = await set_like(db, user.id, movie_id, payload.type)
+    like = await likes.set_like(user.id, movie_id, payload.type)
     await db.commit()
     await db.refresh(like)
 
@@ -59,9 +61,10 @@ async def set_movie_like(
 async def delete_movie_like(
     movie_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
+    likes: Annotated[LikeRepository, Depends(get_like_repo)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> None:
-    removed = await remove_like(db, user.id, movie_id)
+    removed = await likes.remove_like(user.id, movie_id)
     if not removed:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -80,7 +83,7 @@ async def delete_movie_like(
 )
 async def get_movie_likes(
     movie_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    likes: Annotated[LikeRepository, Depends(get_like_repo)],
 ) -> MovieLikesCountSchema:
-    likes, dislikes = await count_movie_likes(db, movie_id)
-    return MovieLikesCountSchema(likes=likes, dislikes=dislikes)
+    like_count, dislike_count = await likes.count_movie_likes(movie_id)
+    return MovieLikesCountSchema(likes=like_count, dislikes=dislike_count)

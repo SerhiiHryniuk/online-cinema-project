@@ -14,6 +14,7 @@ from app.repositories.comments import CommentRepository
 from app.repositories.directors import DirectorRepository
 from app.repositories.favorites import FavoriteRepository
 from app.repositories.genres import GenreRepository
+from app.repositories.likes import LikeRepository
 from app.repositories.movies import MovieRepository
 from app.repositories.notifications import NotificationRepository
 from app.repositories.stars import StarRepository
@@ -113,3 +114,9 @@ async def get_comment_service(
     notifications: Annotated[NotificationRepository, Depends(get_notification_repo)],
 ) -> CommentService:
     return CommentService(comments, notifications)
+
+
+async def get_like_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> LikeRepository:
+    return LikeRepository(db)
