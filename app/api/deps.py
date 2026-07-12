@@ -6,9 +6,9 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
-from app import crud
 from app.db.session import get_db
 from app.models import User
+from app.repositories.accounts import UserGroupRepository, UserRepository
 from app.repositories.certifications import CertificationRepository
 from app.repositories.comments import CommentRepository
 from app.repositories.directors import DirectorRepository
@@ -19,6 +19,7 @@ from app.repositories.movies import MovieRepository
 from app.repositories.notifications import NotificationRepository
 from app.repositories.ratings import RatingRepository
 from app.repositories.stars import StarRepository
+from app.repositories.tokens import PasswordResetTokenRepository, RefreshTokenRepository, ActivationTokenRepository
 from app.security.tokens import decode_token
 from app.services.comments import CommentService
 
@@ -35,13 +36,13 @@ async def get_current_user(
         user_id = int(token_data["sub"])
     except Exception as e:
         logger.error(e)
-
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token"
         )
 
-    user = await crud.get_user_with_group_by_id(db, user_id)
+    users = UserRepository(db)
+    user = await users.get_with_group_by_id(user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -127,3 +128,33 @@ async def get_rating_repo(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> RatingRepository:
     return RatingRepository(db)
+
+
+async def get_user_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> UserRepository:
+    return UserRepository(db)
+
+
+async def get_user_group_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> UserGroupRepository:
+    return UserGroupRepository(db)
+
+
+async def get_activation_token_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ActivationTokenRepository:
+    return ActivationTokenRepository(db)
+
+
+async def get_refresh_token_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> RefreshTokenRepository:
+    return RefreshTokenRepository(db)
+
+
+async def get_password_reset_token_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PasswordResetTokenRepository:
+    return PasswordResetTokenRepository(db)

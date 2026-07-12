@@ -7,11 +7,24 @@ from pydantic import EmailStr
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import crud
-from app.api.deps import get_current_user, allowed_roles_user
+from app.api.deps import (
+    get_current_user,
+    allowed_roles_user,
+    get_activation_token_repo,
+    get_password_reset_token_repo,
+    get_refresh_token_repo,
+    get_user_group_repo,
+    get_user_repo,
+)
 from app.db.session import get_db
 from app.models import RefreshTokenModel
 from app.models.accounts import UserGroupEnum, User
+from app.repositories.accounts import UserRepository, UserGroupRepository
+from app.repositories.tokens import (
+    ActivationTokenRepository,
+    PasswordResetTokenRepository,
+    RefreshTokenRepository,
+)
 from app.schemas.accounts import (
     MessageResponseSchema,
     ResendActivationRequestSchema,
@@ -83,15 +96,18 @@ def _build_activation_link(email: str, token: str) -> str:
 async def register_user(
         user_data: UserRegistrationRequestSchema,
         db: Annotated[AsyncSession, Depends(get_db)],
+        users: Annotated[UserRepository, Depends(get_user_repo)],
+        user_groups: Annotated[UserGroupRepository, Depends(get_user_group_repo)],
+        activation_tokens: Annotated[ActivationTokenRepository, Depends(get_activation_token_repo)],
 ) -> UserRegistrationResponseSchema:
-    existing_user = await crud.get_user_by_email(db, str(user_data.email))
+    existing_user = await users.get_by_email(str(user_data.email))
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"A user with this email {user_data.email} already exists."
         )
 
-    user_group = await crud.get_user_group_by_name(db, UserGroupEnum.USER)
+    user_group = await user_groups.get_by_name(UserGroupEnum.USER)
     if not user_group:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -99,13 +115,12 @@ async def register_user(
         )
 
     try:
-        new_user = await crud.create_user(
-            db,
+        new_user = await users.create(
             email=str(user_data.email),
             hashed_password=hash_password(user_data.password),
             group_id=user_group.id,
         )
-        activation_token = await crud.create_activation_token(db, user_id=new_user.id)
+        activation_token = await activation_tokens.create(user_id=new_user.id)
 
         await db.commit()
         await db.refresh(new_user)
@@ -125,15 +140,15 @@ async def _activate_user_account(
         email: str,
         token: str,
         db: AsyncSession,
+        users: UserRepository,
+        activation_tokens: ActivationTokenRepository,
 ) -> MessageResponseSchema:
-    token_record = await crud.get_activation_token_with_user(
-        db, email=email, token=token
-    )
+    token_record = await activation_tokens.get_with_user(email=email, token=token)
 
     now_utc = datetime.now(timezone.utc)
     if not token_record or token_record.expires_at.replace(tzinfo=timezone.utc) < now_utc:
         if token_record:
-            await crud.delete_activation_token(db, token_record)
+            await activation_tokens.delete(token_record)
             await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -147,8 +162,8 @@ async def _activate_user_account(
             detail="User account is already active."
         )
 
-    await crud.activate_user(user)
-    await crud.delete_activation_token(db, token_record)
+    await users.activate(user)
+    await activation_tokens.delete(token_record)
     await db.commit()
 
     login_link = f"{settings.BASE_URL}/api/v1/accounts/login/"
@@ -191,9 +206,11 @@ async def _activate_user_account(
 async def activate_account(
         activation_data: UserActivationRequestSchema,
         db: Annotated[AsyncSession, Depends(get_db)],
+        users: Annotated[UserRepository, Depends(get_user_repo)],
+        activation_tokens: Annotated[ActivationTokenRepository, Depends(get_activation_token_repo)],
 ) -> MessageResponseSchema:
     return await _activate_user_account(
-        str(activation_data.email), activation_data.token, db
+        str(activation_data.email), activation_data.token, db, users, activation_tokens
     )
 
 
@@ -222,10 +239,12 @@ async def activate_account(
 )
 async def activate_account_via_link(
     db: Annotated[AsyncSession, Depends(get_db)],
+    users: Annotated[UserRepository, Depends(get_user_repo)],
+    activation_tokens: Annotated[ActivationTokenRepository, Depends(get_activation_token_repo)],
     email: EmailStr = Query(..., description="Email address from the activation link."),
     token: str = Query(..., description="Activation token from the activation link."),
 ) -> MessageResponseSchema:
-    return await _activate_user_account(str(email), token, db)
+    return await _activate_user_account(str(email), token, db, users, activation_tokens)
 
 
 @router.post(
@@ -259,8 +278,10 @@ async def activate_account_via_link(
 async def resend_activation(
         resend_data: ResendActivationRequestSchema,
         db: Annotated[AsyncSession, Depends(get_db)],
+        users: Annotated[UserRepository, Depends(get_user_repo)],
+        activation_tokens: Annotated[ActivationTokenRepository, Depends(get_activation_token_repo)],
 ) -> MessageResponseSchema:
-    user = await crud.get_user_by_email(db, str(resend_data.email))
+    user = await users.get_by_email(str(resend_data.email))
 
     if not user:
         raise HTTPException(
@@ -274,12 +295,12 @@ async def resend_activation(
             detail="User account is already active."
         )
 
-    old_token = await crud.get_activation_token_by_user_id(db, user.id)
+    old_token = await activation_tokens.get_by_user_id(user.id)
     if old_token:
-        await crud.delete_activation_token(db, old_token)
+        await activation_tokens.delete(old_token)
         await db.flush()
 
-    new_token = await crud.create_activation_token(db, user_id=user.id)
+    new_token = await activation_tokens.create(user_id=user.id)
     await db.commit()
 
     activation_link = _build_activation_link(str(user.email), new_token.token)
@@ -329,10 +350,10 @@ async def resend_activation(
 )
 async def login(
     login_data: UserLoginSchema,
-    db: Annotated[AsyncSession, Depends(get_db)]
+    db: Annotated[AsyncSession, Depends(get_db)],
+    users: Annotated[UserRepository, Depends(get_user_repo)],
 ) -> TokenResponseSchema:
-    user = await crud.authenticate_user(
-        db=db,
+    user = await users.authenticate(
         email=login_data.email,
         password=login_data.password
     )
@@ -400,6 +421,8 @@ async def login(
 async def refresh(
     refresh_token_data: TokenRefreshSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
+    users: Annotated[UserRepository, Depends(get_user_repo)],
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(get_refresh_token_repo)],
 ) -> TokenResponseSchema:
     try:
         decoded_data = decode_token(
@@ -413,17 +436,17 @@ async def refresh(
             detail="Invalid token"
         )
 
-    refresh_token_record = await crud.get_refresh_token(db, refresh_token_data.refresh_token)
+    refresh_token_record = await refresh_tokens.get_by_token(refresh_token_data.refresh_token)
     if not refresh_token_record:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token not found.",
         )
 
-    await crud.delete_refresh_token(db, refresh_token_record)
+    await refresh_tokens.delete(refresh_token_record)
 
     user_id = int(decoded_data.get("sub"))  # type: ignore[arg-type]
-    user = await crud.get_user_by_id(db, user_id)
+    user = await users.get_by_id(user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -473,9 +496,10 @@ async def refresh(
 )
 async def logout(
     db: Annotated[AsyncSession, Depends(get_db)],
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(get_refresh_token_repo)],
     user: Annotated[User, Depends(get_current_user)]
 ) -> None:
-    token = await crud.get_refresh_token_by_user_id(db, user.id)
+    token = await refresh_tokens.get_by_user_id(user.id)
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -483,7 +507,7 @@ async def logout(
         )
 
     try:
-        await crud.delete_refresh_token(db, token)
+        await refresh_tokens.delete(token)
         await db.commit()
     except SQLAlchemyError:
         await db.rollback()
@@ -497,13 +521,16 @@ async def _reset_password(
         token: str,
         new_password: str,
         db: AsyncSession,
+        users: UserRepository,
+        password_reset_tokens: PasswordResetTokenRepository,
+        refresh_tokens: RefreshTokenRepository,
 ) -> MessageResponseSchema:
-    token_record = await crud.get_password_reset_token_with_user_by_token(db, token=token)
+    token_record = await password_reset_tokens.get_with_user_by_token(token=token)
 
     now_utc = datetime.now(timezone.utc)
     if not token_record or token_record.expires_at.replace(tzinfo=timezone.utc) < now_utc:
         if token_record:
-            await crud.delete_password_reset_token(db, token_record)
+            await password_reset_tokens.delete(token_record)
             await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -512,7 +539,7 @@ async def _reset_password(
 
     user = token_record.user
     if not user.is_active:
-        await crud.delete_password_reset_token(db, token_record)
+        await password_reset_tokens.delete(token_record)
         await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -520,12 +547,12 @@ async def _reset_password(
         )
 
     try:
-        await crud.update_user_password(user, hash_password(new_password))
-        await crud.delete_password_reset_token(db, token_record)
+        await users.update_password(user, hash_password(new_password))
+        await password_reset_tokens.delete(token_record)
 
-        old_refresh_token = await crud.get_refresh_token_by_user_id(db, user.id)
+        old_refresh_token = await refresh_tokens.get_by_user_id(user.id)
         if old_refresh_token:
-            await crud.delete_refresh_token(db, old_refresh_token)
+            await refresh_tokens.delete(old_refresh_token)
 
         await db.commit()
     except SQLAlchemyError:
@@ -561,6 +588,8 @@ async def _reset_password(
 async def change_password(
     password_data: PasswordChangeRequestSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
+    users: Annotated[UserRepository, Depends(get_user_repo)],
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(get_refresh_token_repo)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> MessageResponseSchema:
     if not verify_password(password_data.old_password, user.hashed_password):
@@ -570,11 +599,11 @@ async def change_password(
         )
 
     try:
-        await crud.update_user_password(user, hash_password(password_data.password))
+        await users.update_password(user, hash_password(password_data.password))
 
-        old_refresh_token = await crud.get_refresh_token_by_user_id(db, user.id)
+        old_refresh_token = await refresh_tokens.get_by_user_id(user.id)
         if old_refresh_token:
-            await crud.delete_refresh_token(db, old_refresh_token)
+            await refresh_tokens.delete(old_refresh_token)
 
         await db.commit()
     except SQLAlchemyError:
@@ -602,16 +631,18 @@ async def change_password(
 async def forgot_password(
     reset_data: PasswordResetRequestSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
+    users: Annotated[UserRepository, Depends(get_user_repo)],
+    password_reset_tokens: Annotated[PasswordResetTokenRepository, Depends(get_password_reset_token_repo)],
 ) -> MessageResponseSchema:
-    user = await crud.get_user_by_email(db, str(reset_data.email))
+    user = await users.get_by_email(str(reset_data.email))
 
     if user and user.is_active:
-        old_token = await crud.get_password_reset_token_by_user_id(db, user.id)
+        old_token = await password_reset_tokens.get_by_user_id(user.id)
         if old_token:
-            await crud.delete_password_reset_token(db, old_token)
+            await password_reset_tokens.delete(old_token)
             await db.flush()
 
-        new_token = await crud.create_password_reset_token(db, user_id=user.id)
+        new_token = await password_reset_tokens.create(user_id=user.id)
         await db.commit()
 
         send_password_reset_email_task.delay(str(user.email), new_token.token)
@@ -641,8 +672,13 @@ async def forgot_password(
 async def reset_password(
     reset_data: PasswordResetCompleteRequestSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
+    users: Annotated[UserRepository, Depends(get_user_repo)],
+    password_reset_tokens: Annotated[PasswordResetTokenRepository, Depends(get_password_reset_token_repo)],
+    refresh_tokens: Annotated[RefreshTokenRepository, Depends(get_refresh_token_repo)],
 ) -> MessageResponseSchema:
-    return await _reset_password(reset_data.token, reset_data.password, db)
+    return await _reset_password(
+        reset_data.token, reset_data.password, db, users, password_reset_tokens, refresh_tokens
+    )
 
 
 require_admin = allowed_roles_user(UserGroupEnum.ADMIN)
@@ -654,17 +690,19 @@ require_admin = allowed_roles_user(UserGroupEnum.ADMIN)
 )
 async def change_user(
     db: Annotated[AsyncSession, Depends(get_db)],
+    users: Annotated[UserRepository, Depends(get_user_repo)],
+    user_groups: Annotated[UserGroupRepository, Depends(get_user_group_repo)],
     user_id: int,
     update_data: UserAdminUpdateRequestSchema,
     current_user: User = Depends(require_admin)
 ) -> UserAdminUpdateResponseSchema:
-    user = await crud.get_user_with_group_by_id(db, user_id)
+    user = await users.get_with_group_by_id(user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     if update_data.group is not None:
-        db_group = await crud.get_user_group_by_name(db, update_data.group)
+        db_group = await user_groups.get_by_name(update_data.group)
 
         if not db_group:
             raise HTTPException(status_code=404, detail="Target user group not found in database")

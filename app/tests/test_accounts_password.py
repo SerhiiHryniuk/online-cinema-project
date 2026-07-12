@@ -9,11 +9,7 @@ from fastapi import FastAPI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crud.accounts import (
-    create_password_reset_token,
-    get_password_reset_token_by_user_id,
-    get_refresh_token_by_user_id,
-)
+from app.repositories.tokens import PasswordResetTokenRepository, RefreshTokenRepository
 from app.db.session import get_db
 from app.models.accounts import User, UserGroup, UserGroupEnum
 from app.models.tokens import PasswordResetTokenModel
@@ -58,6 +54,16 @@ async def inactive_user(db_session: AsyncSession, user_group: UserGroup) -> User
     db_session.add(u)
     await db_session.commit()
     return u
+
+
+@pytest.fixture
+def password_reset_tokens(db_session: AsyncSession) -> PasswordResetTokenRepository:
+    return PasswordResetTokenRepository(db_session)
+
+
+@pytest.fixture
+def refresh_tokens(db_session: AsyncSession) -> RefreshTokenRepository:
+    return RefreshTokenRepository(db_session)
 
 
 @pytest.fixture
@@ -191,7 +197,11 @@ class TestChangePassword:
         assert new_login.status_code == 201
 
     async def test_invalidates_existing_refresh_token(
-        self, client: httpx.AsyncClient, db_session: AsyncSession, active_user: User
+        self,
+        client: httpx.AsyncClient,
+        db_session: AsyncSession,
+        refresh_tokens: RefreshTokenRepository,
+        active_user: User,
     ):
         tokens = await _login(client, active_user)
 
@@ -211,7 +221,7 @@ class TestChangePassword:
         )
 
         assert response.status_code == 401
-        assert await get_refresh_token_by_user_id(db_session, active_user.id) is None
+        assert await refresh_tokens.get_by_user_id(active_user.id) is None
 
     async def test_rejects_wrong_old_password(
         self, client: httpx.AsyncClient, active_user: User
@@ -270,6 +280,7 @@ class TestForgotPassword:
         self,
         client: httpx.AsyncClient,
         db_session: AsyncSession,
+        password_reset_tokens: PasswordResetTokenRepository,
         active_user: User,
         send_password_reset_email_mock: MagicMock,
     ):
@@ -280,7 +291,7 @@ class TestForgotPassword:
 
         assert response.status_code == 200
 
-        token_record = await get_password_reset_token_by_user_id(db_session, active_user.id)
+        token_record = await password_reset_tokens.get_by_user_id(active_user.id)
         assert token_record is not None
 
         send_password_reset_email_mock.delay.assert_called_once()
@@ -303,6 +314,7 @@ class TestForgotPassword:
         self,
         client: httpx.AsyncClient,
         db_session: AsyncSession,
+        password_reset_tokens: PasswordResetTokenRepository,
         inactive_user: User,
         send_password_reset_email_mock: MagicMock,
     ):
@@ -312,7 +324,7 @@ class TestForgotPassword:
         )
 
         assert response.status_code == 200
-        assert await get_password_reset_token_by_user_id(db_session, inactive_user.id) is None
+        assert await password_reset_tokens.get_by_user_id(inactive_user.id) is None
         send_password_reset_email_mock.delay.assert_not_called()
 
     async def test_unknown_and_inactive_responses_are_identical(
@@ -334,19 +346,20 @@ class TestForgotPassword:
         self,
         client: httpx.AsyncClient,
         db_session: AsyncSession,
+        password_reset_tokens: PasswordResetTokenRepository,
         active_user: User,
         send_password_reset_email_mock: MagicMock,
     ):
         await client.post(
             "/accounts/forgot-password/", json={"email": active_user.email}
         )
-        first_token = await get_password_reset_token_by_user_id(db_session, active_user.id)
+        first_token = await password_reset_tokens.get_by_user_id(active_user.id)
         first_token_value = first_token.token
 
         await client.post(
             "/accounts/forgot-password/", json={"email": active_user.email}
         )
-        second_token = await get_password_reset_token_by_user_id(db_session, active_user.id)
+        second_token = await password_reset_tokens.get_by_user_id(active_user.id)
 
         assert second_token.token != first_token_value
 
@@ -365,10 +378,11 @@ class TestResetPassword:
         self,
         client: httpx.AsyncClient,
         db_session: AsyncSession,
+        password_reset_tokens: PasswordResetTokenRepository,
         active_user: User,
         send_password_reset_complete_email_mock: MagicMock,
     ):
-        token = await create_password_reset_token(db_session, user_id=active_user.id)
+        token = await password_reset_tokens.create(user_id=active_user.id)
         await db_session.commit()
 
         response = await client.post(
@@ -387,9 +401,13 @@ class TestResetPassword:
         send_password_reset_complete_email_mock.delay.assert_called_once()
 
     async def test_can_login_with_new_password_after_reset(
-        self, client: httpx.AsyncClient, db_session: AsyncSession, active_user: User
+        self,
+        client: httpx.AsyncClient,
+        db_session: AsyncSession,
+        password_reset_tokens: PasswordResetTokenRepository,
+        active_user: User,
     ):
-        token = await create_password_reset_token(db_session, user_id=active_user.id)
+        token = await password_reset_tokens.create(user_id=active_user.id)
         await db_session.commit()
 
         await client.post(
@@ -409,10 +427,15 @@ class TestResetPassword:
         assert response.status_code == 201
 
     async def test_invalidates_existing_refresh_token(
-        self, client: httpx.AsyncClient, db_session: AsyncSession, active_user: User
+        self,
+        client: httpx.AsyncClient,
+        db_session: AsyncSession,
+        password_reset_tokens: PasswordResetTokenRepository,
+        refresh_tokens: RefreshTokenRepository,
+        active_user: User,
     ):
         tokens = await _login(client, active_user)
-        reset_token = await create_password_reset_token(db_session, user_id=active_user.id)
+        reset_token = await password_reset_tokens.create(user_id=active_user.id)
         await db_session.commit()
 
         await client.post(
@@ -430,7 +453,7 @@ class TestResetPassword:
         )
 
         assert response.status_code == 401
-        assert await get_refresh_token_by_user_id(db_session, active_user.id) is None
+        assert await refresh_tokens.get_by_user_id(active_user.id) is None
 
     async def test_rejects_invalid_token(self, client: httpx.AsyncClient):
         response = await client.post(
@@ -469,9 +492,13 @@ class TestResetPassword:
         assert await db_session.get(PasswordResetTokenModel, token_id) is None
 
     async def test_token_cannot_be_reused_after_successful_reset(
-        self, client: httpx.AsyncClient, db_session: AsyncSession, active_user: User
+        self,
+        client: httpx.AsyncClient,
+        db_session: AsyncSession,
+        password_reset_tokens: PasswordResetTokenRepository,
+        active_user: User,
     ):
-        token = await create_password_reset_token(db_session, user_id=active_user.id)
+        token = await password_reset_tokens.create(user_id=active_user.id)
         await db_session.commit()
 
         first = await client.post(
@@ -495,9 +522,13 @@ class TestResetPassword:
         assert second.status_code == 400
 
     async def test_rejects_mismatched_password_confirmation(
-        self, client: httpx.AsyncClient, db_session: AsyncSession, active_user: User
+        self,
+        client: httpx.AsyncClient,
+        db_session: AsyncSession,
+        password_reset_tokens: PasswordResetTokenRepository,
+        active_user: User,
     ):
-        token = await create_password_reset_token(db_session, user_id=active_user.id)
+        token = await password_reset_tokens.create(user_id=active_user.id)
         await db_session.commit()
 
         response = await client.post(
@@ -512,9 +543,13 @@ class TestResetPassword:
         assert response.status_code == 422
 
     async def test_rejects_weak_new_password(
-        self, client: httpx.AsyncClient, db_session: AsyncSession, active_user: User
+        self,
+        client: httpx.AsyncClient,
+        db_session: AsyncSession,
+        password_reset_tokens: PasswordResetTokenRepository,
+        active_user: User,
     ):
-        token = await create_password_reset_token(db_session, user_id=active_user.id)
+        token = await password_reset_tokens.create(user_id=active_user.id)
         await db_session.commit()
 
         response = await client.post(

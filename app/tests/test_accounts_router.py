@@ -11,12 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
 
 from app.core.config import settings
-from app.crud.accounts import (
-    create_activation_token,
-    get_activation_token_by_user_id,
-    get_activation_token_with_user,
-    get_refresh_token,
-)
+from app.repositories.tokens import ActivationTokenRepository, RefreshTokenRepository
 from app.db.session import get_db
 from app.models.accounts import User, UserGroup, UserGroupEnum
 from app.models.tokens import ActivationTokenModel, RefreshTokenModel
@@ -62,6 +57,16 @@ async def active_user(db_session: AsyncSession, user_group: UserGroup) -> User:
     db_session.add(u)
     await db_session.commit()
     return u
+
+
+@pytest.fixture
+def activation_tokens(db_session: AsyncSession) -> ActivationTokenRepository:
+    return ActivationTokenRepository(db_session)
+
+
+@pytest.fixture
+def refresh_tokens(db_session: AsyncSession) -> RefreshTokenRepository:
+    return RefreshTokenRepository(db_session)
 
 
 @pytest.fixture
@@ -165,10 +170,11 @@ class TestActivateAccount:
         self,
         client: httpx.AsyncClient,
         db_session: AsyncSession,
+        activation_tokens: ActivationTokenRepository,
         inactive_user: User,
         send_activation_complete_email_mock: MagicMock,
     ):
-        token = await create_activation_token(db_session, user_id=inactive_user.id)
+        token = await activation_tokens.create(user_id=inactive_user.id)
         await db_session.commit()
 
         response = await client.post(
@@ -183,9 +189,13 @@ class TestActivateAccount:
         send_activation_complete_email_mock.delay.assert_called_once()
 
     async def test_rejects_invalid_token(
-        self, client: httpx.AsyncClient, db_session: AsyncSession, inactive_user: User
+        self,
+        client: httpx.AsyncClient,
+        db_session: AsyncSession,
+        activation_tokens: ActivationTokenRepository,
+        inactive_user: User,
     ):
-        await create_activation_token(db_session, user_id=inactive_user.id)
+        await activation_tokens.create(user_id=inactive_user.id)
         await db_session.commit()
 
         response = await client.post(
@@ -216,9 +226,13 @@ class TestActivateAccount:
         assert await db_session.get(ActivationTokenModel, token_id) is None
 
     async def test_rejects_already_active_user(
-        self, client: httpx.AsyncClient, db_session: AsyncSession, inactive_user: User
+        self,
+        client: httpx.AsyncClient,
+        db_session: AsyncSession,
+        activation_tokens: ActivationTokenRepository,
+        inactive_user: User,
     ):
-        token = await create_activation_token(db_session, user_id=inactive_user.id)
+        token = await activation_tokens.create(user_id=inactive_user.id)
         inactive_user.is_active = True
         await db_session.commit()
 
@@ -235,10 +249,11 @@ class TestActivateAccountViaLink:
         self,
         client: httpx.AsyncClient,
         db_session: AsyncSession,
+        activation_tokens: ActivationTokenRepository,
         inactive_user: User,
         send_activation_complete_email_mock: MagicMock,
     ):
-        token = await create_activation_token(db_session, user_id=inactive_user.id)
+        token = await activation_tokens.create(user_id=inactive_user.id)
         await db_session.commit()
 
         response = await client.get(
@@ -253,9 +268,13 @@ class TestActivateAccountViaLink:
         send_activation_complete_email_mock.delay.assert_called_once()
 
     async def test_rejects_invalid_token_via_get(
-        self, client: httpx.AsyncClient, db_session: AsyncSession, inactive_user: User
+        self,
+        client: httpx.AsyncClient,
+        db_session: AsyncSession,
+        activation_tokens: ActivationTokenRepository,
+        inactive_user: User,
     ):
-        await create_activation_token(db_session, user_id=inactive_user.id)
+        await activation_tokens.create(user_id=inactive_user.id)
         await db_session.commit()
 
         response = await client.get(
@@ -271,10 +290,11 @@ class TestResendActivation:
         self,
         client: httpx.AsyncClient,
         db_session: AsyncSession,
+        activation_tokens: ActivationTokenRepository,
         inactive_user: User,
         send_activation_email_mock: MagicMock,
     ):
-        old_token = await create_activation_token(db_session, user_id=inactive_user.id)
+        old_token = await activation_tokens.create(user_id=inactive_user.id)
         await db_session.commit()
         old_token_value = old_token.token
 
@@ -285,12 +305,12 @@ class TestResendActivation:
 
         assert response.status_code == 200
 
-        stale_lookup = await get_activation_token_with_user(
-            db_session, email=inactive_user.email, token=old_token_value
+        stale_lookup = await activation_tokens.get_with_user(
+            email=inactive_user.email, token=old_token_value
         )
         assert stale_lookup is None
 
-        new_token = await get_activation_token_by_user_id(db_session, inactive_user.id)
+        new_token = await activation_tokens.get_by_user_id(inactive_user.id)
         assert new_token is not None
         assert new_token.token != old_token_value
 
@@ -339,7 +359,11 @@ class TestLogin:
         assert "refresh_token" in body
 
     async def test_creates_refresh_token_record_in_db(
-        self, client: httpx.AsyncClient, db_session: AsyncSession, active_user: User
+        self,
+        client: httpx.AsyncClient,
+        db_session: AsyncSession,
+        refresh_tokens: RefreshTokenRepository,
+        active_user: User,
     ):
         response = await client.post(
             "/accounts/login/",
@@ -347,7 +371,7 @@ class TestLogin:
         )
 
         refresh_token_value = response.json()["refresh_token"]
-        record = await get_refresh_token(db_session, refresh_token_value)
+        record = await refresh_tokens.get_by_token(refresh_token_value)
 
         assert record is not None
         assert record.user_id == active_user.id
@@ -434,7 +458,11 @@ class TestRefresh:
         assert new_tokens["access_token"] != tokens["access_token"]
 
     async def test_rotates_refresh_token_in_db(
-        self, client: httpx.AsyncClient, db_session: AsyncSession, active_user: User
+        self,
+        client: httpx.AsyncClient,
+        db_session: AsyncSession,
+        refresh_tokens: RefreshTokenRepository,
+        active_user: User,
     ):
         tokens = await self._login(client, active_user)
 
@@ -444,8 +472,8 @@ class TestRefresh:
         )
         new_refresh_token = response.json()["refresh_token"]
 
-        assert await get_refresh_token(db_session, tokens["refresh_token"]) is None
-        record = await get_refresh_token(db_session, new_refresh_token)
+        assert await refresh_tokens.get_by_token(tokens["refresh_token"]) is None
+        record = await refresh_tokens.get_by_token(new_refresh_token)
         assert record is not None
         assert record.user_id == active_user.id
 
@@ -525,7 +553,11 @@ class TestLogout:
         return response.json()
 
     async def test_logout_deletes_refresh_token(
-        self, client: httpx.AsyncClient, db_session: AsyncSession, active_user: User
+        self,
+        client: httpx.AsyncClient,
+        db_session: AsyncSession,
+        refresh_tokens: RefreshTokenRepository,
+        active_user: User,
     ):
         tokens = await self._login(client, active_user)
 
@@ -535,7 +567,7 @@ class TestLogout:
         )
 
         assert response.status_code == 204
-        assert await get_refresh_token(db_session, tokens["refresh_token"]) is None
+        assert await refresh_tokens.get_by_token(tokens["refresh_token"]) is None
 
     async def test_logout_without_credentials_is_rejected(
         self, client: httpx.AsyncClient
