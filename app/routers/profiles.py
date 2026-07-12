@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import crud
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_profile_repo
 from app.db.session import get_db
 from app.exceptions import MinioConnectionError, MinioFileUploadError
 from app.models.accounts import User
+from app.repositories.profiles import ProfileRepository
 from app.schemas.profiles import ProfileResponseSchema, ProfileUpdateRequestSchema
 from app.storage.minio import delete_avatar, get_avatar_url, upload_avatar
 
@@ -30,11 +30,12 @@ async def _build_response(profile: Any) -> ProfileResponseSchema:
 )
 async def get_my_profile(
     db: Annotated[AsyncSession, Depends(get_db)],
+    profiles: Annotated[ProfileRepository, Depends(get_profile_repo)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> ProfileResponseSchema:
-    profile = await crud.get_profile(db, user.id)
+    profile = await profiles.get_by_user_id(user.id)
     if profile is None:
-        profile = await crud.create_profile(db, user.id)
+        profile = await profiles.create(user.id)
         await db.commit()
         await db.refresh(profile)
 
@@ -71,12 +72,13 @@ async def get_my_profile(
 )
 async def update_my_profile(
     db: Annotated[AsyncSession, Depends(get_db)],
+    profiles: Annotated[ProfileRepository, Depends(get_profile_repo)],
     user: Annotated[User, Depends(get_current_user)],
     profile_data: Annotated[ProfileUpdateRequestSchema, Depends(ProfileUpdateRequestSchema.as_form)],
 ) -> ProfileResponseSchema:
-    profile = await crud.get_profile(db, user.id)
+    profile = await profiles.get_by_user_id(user.id)
     if profile is None:
-        profile = await crud.create_profile(db, user.id)
+        profile = await profiles.create(user.id)
 
     old_avatar = profile.avatar
     new_avatar_key = None
@@ -103,7 +105,7 @@ async def update_my_profile(
         update_data["avatar"] = new_avatar_key
 
     try:
-        await crud.update_profile(profile, **update_data)
+        await profiles.update(profile, **update_data)
         await db.commit()
         await db.refresh(profile)
     except SQLAlchemyError:

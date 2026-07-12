@@ -17,6 +17,7 @@ from app.repositories.genres import GenreRepository
 from app.repositories.likes import LikeRepository
 from app.repositories.movies import MovieRepository
 from app.repositories.notifications import NotificationRepository
+from app.repositories.profiles import ProfileRepository
 from app.repositories.ratings import RatingRepository
 from app.repositories.stars import StarRepository
 from app.repositories.tokens import PasswordResetTokenRepository, RefreshTokenRepository, ActivationTokenRepository
@@ -158,3 +159,9 @@ async def get_password_reset_token_repo(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PasswordResetTokenRepository:
     return PasswordResetTokenRepository(db)
+
+
+async def get_profile_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ProfileRepository:
+    return ProfileRepository(db)

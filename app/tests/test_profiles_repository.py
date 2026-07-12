@@ -2,7 +2,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crud import create_profile, get_profile, update_profile
+from app.repositories.profiles import ProfileRepository
 from app.models.accounts import GenderEnum, User, UserGroup, UserGroupEnum
 
 pytestmark = pytest.mark.asyncio
@@ -24,15 +24,22 @@ async def user(db_session: AsyncSession, user_group: UserGroup) -> User:
     return u
 
 
-class TestGetProfile:
-    async def test_returns_none_when_missing(self, db_session: AsyncSession, user: User):
-        assert await get_profile(db_session, user.id) is None
+@pytest.fixture
+def profiles(db_session: AsyncSession) -> ProfileRepository:
+    return ProfileRepository(db_session)
 
-    async def test_returns_existing_profile(self, db_session: AsyncSession, user: User):
-        created = await create_profile(db_session, user.id)
+
+class TestGetProfile:
+    async def test_returns_none_when_missing(self, profiles: ProfileRepository, user: User):
+        assert await profiles.get_by_user_id(user.id) is None
+
+    async def test_returns_existing_profile(
+        self, db_session: AsyncSession, profiles: ProfileRepository, user: User
+    ):
+        created = await profiles.create(user.id)
         await db_session.commit()
 
-        found = await get_profile(db_session, user.id)
+        found = await profiles.get_by_user_id(user.id)
 
         assert found is not None
         assert found.id == created.id
@@ -40,8 +47,8 @@ class TestGetProfile:
 
 
 class TestCreateProfile:
-    async def test_creates_empty_profile(self, db_session: AsyncSession, user: User):
-        profile = await create_profile(db_session, user.id)
+    async def test_creates_empty_profile(self, profiles: ProfileRepository, user: User):
+        profile = await profiles.create(user.id)
 
         assert profile.user_id == user.id
         assert profile.first_name is None
@@ -49,11 +56,13 @@ class TestCreateProfile:
 
 
 class TestUpdateProfile:
-    async def test_updates_given_fields(self, db_session: AsyncSession, user: User):
-        profile = await create_profile(db_session, user.id)
+    async def test_updates_given_fields(
+        self, db_session: AsyncSession, profiles: ProfileRepository, user: User
+    ):
+        profile = await profiles.create(user.id)
         await db_session.commit()
 
-        await update_profile(
+        await profiles.update(
             profile,
             first_name="Taras",
             last_name="Shevchenko",
@@ -66,20 +75,24 @@ class TestUpdateProfile:
         assert profile.gender == GenderEnum.MAN
         assert profile.info == "Hello there"
 
-    async def test_updates_avatar_field(self, db_session: AsyncSession, user: User):
-        profile = await create_profile(db_session, user.id)
+    async def test_updates_avatar_field(
+        self, db_session: AsyncSession, profiles: ProfileRepository, user: User
+    ):
+        profile = await profiles.create(user.id)
         await db_session.commit()
 
-        await update_profile(profile, avatar="avatars/1/new.jpg")
+        await profiles.update(profile, avatar="avatars/1/new.jpg")
 
         assert profile.avatar == "avatars/1/new.jpg"
 
-    async def test_leaves_unspecified_fields_untouched(self, db_session: AsyncSession, user: User):
-        profile = await create_profile(db_session, user.id)
-        await update_profile(profile, first_name="Taras")
+    async def test_leaves_unspecified_fields_untouched(
+        self, db_session: AsyncSession, profiles: ProfileRepository, user: User
+    ):
+        profile = await profiles.create(user.id)
+        await profiles.update(profile, first_name="Taras")
         await db_session.commit()
 
-        await update_profile(profile, last_name="Shevchenko")
+        await profiles.update(profile, last_name="Shevchenko")
 
         assert profile.first_name == "Taras"
         assert profile.last_name == "Shevchenko"

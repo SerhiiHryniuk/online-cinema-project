@@ -7,7 +7,7 @@ import pytest_asyncio
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crud.profiles import create_profile
+from app.repositories.profiles import ProfileRepository
 from app.db.session import get_db
 from app.exceptions import MinioConnectionError, MinioFileUploadError
 from app.models.accounts import User, UserGroup, UserGroupEnum
@@ -108,7 +108,7 @@ class TestGetProfile:
         active_user: User,
         db_session: AsyncSession,
     ):
-        profile = await create_profile(db_session, active_user.id)
+        profile = await ProfileRepository(db_session).create(active_user.id)
         profile.first_name = "Taras"
         profile.avatar = "avatars/1/old.jpg"
         await db_session.commit()
@@ -174,7 +174,7 @@ class TestUpdateProfile:
         upload_avatar_mock: AsyncMock,
         delete_avatar_mock: AsyncMock,
     ):
-        profile = await create_profile(db_session, active_user.id)
+        profile = await ProfileRepository(db_session).create(active_user.id)
         profile.avatar = "avatars/1/old.jpg"
         await db_session.commit()
 
