@@ -3,8 +3,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_movie_repo
-from app.crud.carts import check_movie_in_any_cart
+from app.api.deps import get_movie_repo, allowed_roles_user
+from app.api.deps import get_cart_repo
+from app.models import User, UserGroupEnum
+from app.repositories.carts import CartRepository
 from app.db.session import get_db
 from app.repositories.movies import MovieRepository
 from app.schemas.movie_admin import (
@@ -107,6 +109,8 @@ async def delete_existing_movie(
     movie_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
     movies: Annotated[MovieRepository, Depends(get_movie_repo)],
+    carts: Annotated[CartRepository, Depends(get_cart_repo)],
+    user: Annotated[User, Depends(allowed_roles_user(UserGroupEnum.MODERATOR, UserGroupEnum.ADMIN))],
 ) -> None:
     movie = await movies.get_admin(movie_id)
     if movie is None:
@@ -121,7 +125,7 @@ async def delete_existing_movie(
             detail="Movie has purchases and cannot be deleted.",
         )
 
-    if await check_movie_in_any_cart(db, movie_id):
+    if await carts.check_movie_in_any_cart(movie_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete movie, it currently exists in user carts.",

@@ -9,6 +9,7 @@ from starlette import status
 from app.db.session import get_db
 from app.models import User
 from app.repositories.accounts import UserGroupRepository, UserRepository
+from app.repositories.carts import CartRepository
 from app.repositories.certifications import CertificationRepository
 from app.repositories.comments import CommentRepository
 from app.repositories.directors import DirectorRepository
@@ -17,12 +18,15 @@ from app.repositories.genres import GenreRepository
 from app.repositories.likes import LikeRepository
 from app.repositories.movies import MovieRepository
 from app.repositories.notifications import NotificationRepository
+from app.repositories.orders import OrderRepository
 from app.repositories.profiles import ProfileRepository
 from app.repositories.ratings import RatingRepository
 from app.repositories.stars import StarRepository
 from app.repositories.tokens import PasswordResetTokenRepository, RefreshTokenRepository, ActivationTokenRepository
 from app.security.tokens import decode_token
+from app.services.carts import CartService
 from app.services.comments import CommentService
+from app.services.orders import OrderService
 
 bearer_scheme = HTTPBearer()
 
@@ -165,3 +169,28 @@ async def get_profile_repo(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ProfileRepository:
     return ProfileRepository(db)
+
+
+async def get_cart_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> CartRepository:
+    return CartRepository(db)
+
+
+async def get_order_repo(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> OrderRepository:
+    return OrderRepository(db)
+
+
+async def get_cart_service(
+    carts: Annotated[CartRepository, Depends(get_cart_repo)],
+) -> CartService:
+    return CartService(carts)
+
+
+async def get_order_service(
+    orders: Annotated[OrderRepository, Depends(get_order_repo)],
+    notifications: Annotated[NotificationRepository, Depends(get_notification_repo)],
+) -> OrderService:
+    return OrderService(orders, notifications)
