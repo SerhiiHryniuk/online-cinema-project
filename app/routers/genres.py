@@ -1,22 +1,14 @@
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import allowed_roles_user
-from app.crud.genres import (
-    create_genre,
-    delete_genre,
-    get_genre_by_id,
-    get_genre_by_name,
-    get_genres_with_counts,
-    update_genre,
-)
-from app.crud.movies import _apply_filters, _apply_sorting
+from app.api.deps import get_genre_repo, get_movie_repo
+from app.repositories.movies import MovieRepository
 from app.db.session import get_db
-from app.models.accounts import User, UserGroupEnum
 from app.models.movies import Movie, movie_genres
+from app.repositories.genres import GenreRepository
 from app.schemas.genres import (
     GenreCreateSchema,
     GenreSchema,
@@ -41,9 +33,9 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
 )
 async def list_genres(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    genres: Annotated[GenreRepository, Depends(get_genre_repo)],
 ) -> list[GenreWithCountSchema]:
-    rows = await get_genres_with_counts(db)
+    rows = await genres.get_with_counts()
     return [
         GenreWithCountSchema(
             id=genre.id,
@@ -68,24 +60,16 @@ async def list_genres(
 async def create_new_genre(
     payload: GenreCreateSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
+    genres: Annotated[GenreRepository, Depends(get_genre_repo)],
 ) -> GenreSchema:
-    existing = await get_genre_by_name(db, payload.name)
+    existing = await genres.get_by_name(payload.name)
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Genre already exists.",
         )
 
-    genre = await create_genre(db, payload.name)
+    genre = await genres.create(payload.name)
     await db.commit()
     await db.refresh(genre)
 
@@ -108,31 +92,23 @@ async def update_existing_genre(
     genre_id: int,
     payload: GenreCreateSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
+    genres: Annotated[GenreRepository, Depends(get_genre_repo)],
 ) -> GenreSchema:
-    genre = await get_genre_by_id(db, genre_id)
+    genre = await genres.get_by_id(genre_id)
     if genre is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Genre not found.",
         )
 
-    duplicate = await get_genre_by_name(db, payload.name)
+    duplicate = await genres.get_by_name(payload.name)
     if duplicate is not None and duplicate.id != genre_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Genre name already taken.",
         )
 
-    genre = await update_genre(db, genre, payload.name)
+    genre = await genres.update(genre, payload.name)
     await db.commit()
     await db.refresh(genre)
 
@@ -152,24 +128,16 @@ async def update_existing_genre(
 async def delete_existing_genre(
     genre_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
+    genres: Annotated[GenreRepository, Depends(get_genre_repo)],
 ) -> None:
-    genre = await get_genre_by_id(db, genre_id)
+    genre = await genres.get_by_id(genre_id)
     if genre is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Genre not found.",
         )
 
-    await delete_genre(db, genre)
+    await genres.delete(genre)
     await db.commit()
 
 
@@ -189,6 +157,8 @@ async def delete_existing_genre(
 async def list_genre_movies(
     genre_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
+    genres: Annotated[GenreRepository, Depends(get_genre_repo)],
+    movies: Annotated[MovieRepository, Depends(get_movie_repo)],
     page: Annotated[int, Query(ge=1)] = 1,
     per_page: Annotated[int, Query(ge=1, le=100)] = 10,
     year: Annotated[Optional[int], Query()] = None,
@@ -198,7 +168,7 @@ async def list_genre_movies(
     sort_by: Annotated[MovieSortField, Query()] = MovieSortField.YEAR,
     sort_order: Annotated[MovieSortOrder, Query()] = MovieSortOrder.DESC,
 ) -> MovieListResponseSchema:
-    genre = await get_genre_by_id(db, genre_id)
+    genre = await genres.get_by_id(genre_id)
     if genre is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -206,12 +176,8 @@ async def list_genre_movies(
         )
 
     params = MovieFilterParams(
-        year=year,
-        min_imdb=min_imdb,
-        max_imdb=max_imdb,
-        search=search,
-        sort_by=sort_by,
-        sort_order=sort_order,
+        year=year, min_imdb=min_imdb, max_imdb=max_imdb,
+        search=search, sort_by=sort_by, sort_order=sort_order,
     )
 
     base_stmt = (
@@ -219,15 +185,10 @@ async def list_genre_movies(
         .join(movie_genres, Movie.id == movie_genres.c.movie_id)
         .where(movie_genres.c.genre_id == genre_id)
     )
-    filtered_stmt = _apply_filters(base_stmt, params)
 
-    count_stmt = select(func.count()).select_from(
-        filtered_stmt.order_by(None).subquery()
-    )
-    total_result = await db.execute(count_stmt)
-    total = total_result.scalar_one()
+    total = await movies.count_filtered(base_stmt, params)
+    sorted_stmt = movies.build_filtered_sorted_stmt(base_stmt, params)
 
-    sorted_stmt = _apply_sorting(filtered_stmt, params)
     offset = (page - 1) * per_page
     page_stmt = sorted_stmt.offset(offset).limit(per_page)
 
@@ -237,8 +198,5 @@ async def list_genre_movies(
 
     return MovieListResponseSchema(
         items=[MovieListItemSchema.model_validate(m) for m in items],
-        total=total,
-        page=page,
-        per_page=per_page,
-        total_pages=total_pages,
+        total=total, page=page, per_page=per_page, total_pages=total_pages,
     )

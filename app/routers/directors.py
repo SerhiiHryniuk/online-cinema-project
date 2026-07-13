@@ -3,17 +3,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import allowed_roles_user
-from app.crud.directors import (
-    create_director,
-    delete_director,
-    get_all_directors,
-    get_director_by_id,
-    get_director_by_name,
-    update_director,
-)
+from app.api.deps import get_director_repo
 from app.db.session import get_db
-from app.models.accounts import User, UserGroupEnum
+from app.repositories.directors import DirectorRepository
 from app.schemas.directors import (
     DirectorCreateSchema,
     DirectorSchema,
@@ -30,12 +22,12 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
 )
 async def list_directors(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    directors: Annotated[DirectorRepository, Depends(get_director_repo)],
 ) -> list[DirectorSchema]:
-    directors = await get_all_directors(db)
+    all_directors = await directors.get_all()
     return [
         DirectorSchema.model_validate(director)
-        for director in directors
+        for director in all_directors
     ]
 
 
@@ -53,24 +45,16 @@ async def list_directors(
 async def create_new_director(
     payload: DirectorCreateSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
+    directors: Annotated[DirectorRepository, Depends(get_director_repo)],
 ) -> DirectorSchema:
-    existing = await get_director_by_name(db, payload.name)
+    existing = await directors.get_by_name(payload.name)
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Director already exists.",
         )
 
-    director = await create_director(db, payload.name)
+    director = await directors.create(payload.name)
     await db.commit()
     await db.refresh(director)
 
@@ -93,31 +77,23 @@ async def update_existing_director(
     director_id: int,
     payload: DirectorCreateSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
+    directors: Annotated[DirectorRepository, Depends(get_director_repo)],
 ) -> DirectorSchema:
-    director = await get_director_by_id(db, director_id)
+    director = await directors.get_by_id(director_id)
     if director is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Director not found.",
         )
 
-    duplicate = await get_director_by_name(db, payload.name)
+    duplicate = await directors.get_by_name(payload.name)
     if duplicate is not None and duplicate.id != director_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Director name already taken.",
         )
 
-    director = await update_director(db, director, payload.name)
+    director = await directors.update(director, payload.name)
     await db.commit()
     await db.refresh(director)
 
@@ -137,22 +113,14 @@ async def update_existing_director(
 async def delete_existing_director(
     director_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[
-        User,
-        Depends(
-            allowed_roles_user(
-                UserGroupEnum.MODERATOR,
-                UserGroupEnum.ADMIN,
-            )
-        ),
-    ],
+    directors: Annotated[DirectorRepository, Depends(get_director_repo)],
 ) -> None:
-    director = await get_director_by_id(db, director_id)
+    director = await directors.get_by_id(director_id)
     if director is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Director not found.",
         )
 
-    await delete_director(db, director)
+    await directors.delete(director)
     await db.commit()

@@ -1,44 +1,47 @@
 from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
-from app import crud
-from app.db.session import get_db
-from app.api.deps import get_current_user, allowed_roles_user
-from app.models import User
-from app.schemas.carts import CartReadSchema
+from app.api.deps import (
+    allowed_roles_user,
+    get_cart_repo,
+    get_cart_service,
+    get_current_user,
+)
+
 from app.exceptions import CartNotFound, MovieNotFound
+from app.models import User
+from app.repositories.carts import CartRepository
+from app.schemas.carts import CartReadSchema
+from app.services.carts import CartService
 
 router = APIRouter()
 
 
 @router.get("/me", response_model=CartReadSchema)
 async def get_my_cart(
-        db: Annotated[AsyncSession, Depends(get_db)],
+        carts: Annotated[CartRepository, Depends(get_cart_repo)],
         current_user: Annotated[User, Depends(get_current_user)],
 ) -> CartReadSchema:
-    cart = await crud.get_user_cart(db, current_user.id)
+    cart = await carts.get_or_create(current_user.id)
     return CartReadSchema.model_validate(cart)
 
 
 @router.post("/me/items/{movie_id}", response_model=CartReadSchema)
 async def add_item_to_cart(
         movie_id: int,
-        db: Annotated[AsyncSession, Depends(get_db)],
+        carts: Annotated[CartRepository, Depends(get_cart_repo)],
         current_user: Annotated[User, Depends(get_current_user)],
 ) -> CartReadSchema:
-    is_purchased = await crud.is_movie_purchased(db, current_user.id, movie_id)
+    is_purchased = await carts.is_movie_purchased(current_user.id, movie_id)
     if is_purchased:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "Repeat purchases are not allowed. "
-                "You already own this movie."
-            ),
+            detail="Repeat purchases are not allowed. You already own this movie.",
         )
 
-    cart = await crud.get_or_create_cart(db, current_user.id)
+    cart = await carts.get_or_create(current_user.id)
 
     if any(item.movie_id == movie_id for item in cart.items):
         raise HTTPException(
@@ -47,8 +50,9 @@ async def add_item_to_cart(
         )
 
     try:
-        await crud.add_movie_to_cart(db, cart.id, movie_id)
-        updated_cart = await crud.get_user_cart(db, current_user.id)
+        await carts.add_movie(cart.id, movie_id)
+        carts.db.expire(cart, ["items"])
+        updated_cart = await carts.get_or_create(current_user.id)
         return CartReadSchema.model_validate(updated_cart)
     except MovieNotFound as error:
         raise HTTPException(
@@ -60,14 +64,14 @@ async def add_item_to_cart(
 @router.delete("/me/items/{movie_id}", response_model=CartReadSchema)
 async def remove_item_from_cart(
         movie_id: int,
-        db: Annotated[AsyncSession, Depends(get_db)],
+        carts: Annotated[CartRepository, Depends(get_cart_repo)],
         current_user: Annotated[User, Depends(get_current_user)],
 ) -> CartReadSchema:
-    cart = await crud.get_or_create_cart(db, current_user.id)
+    cart = await carts.get_or_create(current_user.id)
     try:
-        await crud.remove_movie_from_cart(db, cart.id, movie_id)
-        await db.refresh(cart)
-        updated_cart = await crud.get_user_cart(db, current_user.id)
+        await carts.remove_movie(cart.id, movie_id)
+        carts.db.expire(cart, ["items"])
+        updated_cart = await carts.get_or_create(current_user.id)
         return CartReadSchema.model_validate(updated_cart)
     except MovieNotFound as error:
         raise HTTPException(
@@ -78,20 +82,21 @@ async def remove_item_from_cart(
 
 @router.delete("/me/clear", status_code=status.HTTP_204_NO_CONTENT)
 async def clear_my_cart(
-        db: Annotated[AsyncSession, Depends(get_db)],
+        carts: Annotated[CartRepository, Depends(get_cart_repo)],
         current_user: Annotated[User, Depends(get_current_user)],
 ) -> None:
-    cart = await crud.get_or_create_cart(db, current_user.id)
-    await crud.clear_cart(db, cart.id)
+    cart = await carts.get_or_create(current_user.id)
+    await carts.clear(cart.id)
+    carts.db.expire(cart, ["items"])
 
 
 @router.post("/me/checkout")
 async def checkout_my_cart(
-        db: Annotated[AsyncSession, Depends(get_db)],
+        cart_service: Annotated[CartService, Depends(get_cart_service)],
         current_user: Annotated[User, Depends(get_current_user)],
 ) -> dict[str, Any]:
     try:
-        order = await crud.checkout_cart(db, current_user.id)
+        order = await cart_service.checkout(current_user.id)
         return {"message": "Payment successful", "order_id": order.id}
     except CartNotFound as error:
         raise HTTPException(
@@ -103,8 +108,8 @@ async def checkout_my_cart(
 @router.get("/user/{user_id}", response_model=CartReadSchema)
 async def admin_get_user_cart(
         user_id: int,
-        db: Annotated[AsyncSession, Depends(get_db)],
+        carts: Annotated[CartRepository, Depends(get_cart_repo)],
         _: Annotated[User, Depends(allowed_roles_user("ADMIN", "MODERATOR"))],
 ) -> CartReadSchema:
-    cart = await crud.admin_get_user_cart(db, user_id)
+    cart = await carts.get_or_create(user_id)
     return CartReadSchema.model_validate(cart)

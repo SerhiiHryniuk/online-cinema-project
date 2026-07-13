@@ -1,10 +1,9 @@
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crud.movies import get_movie_by_id, get_movies_page
-from app.db.session import get_db
+from app.api.deps import get_movie_repo
+from app.repositories.movies import MovieRepository
 from app.schemas.movies import (
     MovieDetailSchema,
     MovieFilterParams,
@@ -28,7 +27,7 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
 )
 async def list_movies(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    movies: Annotated[MovieRepository, Depends(get_movie_repo)],
     page: Annotated[int, Query(ge=1)] = 1,
     per_page: Annotated[int, Query(ge=1, le=100)] = 10,
     year: Annotated[Optional[int], Query()] = None,
@@ -47,7 +46,7 @@ async def list_movies(
         sort_order=sort_order,
     )
 
-    items, total = await get_movies_page(db, page, per_page, params)
+    items, total = await movies.get_page(page, per_page, params)
     total_pages = (total + per_page - 1) // per_page
 
     return MovieListResponseSchema(
@@ -70,10 +69,10 @@ async def list_movies(
     },
 )
 async def get_movie(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    movies: Annotated[MovieRepository, Depends(get_movie_repo)],
     movie_id: int,
 ) -> MovieDetailSchema:
-    movie = await get_movie_by_id(db, movie_id)
+    movie = await movies.get_by_id(movie_id)
     if movie is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

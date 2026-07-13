@@ -3,19 +3,16 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
-from app.crud.comments import (
-    create_comment,
-    get_comment_by_id,
-    get_movie_comments,
-)
-from app.crud.movies import get_movie_by_id
+from app.api.deps import get_comment_repo, get_comment_service, get_current_user, get_movie_repo
 from app.db.session import get_db
 from app.models.accounts import User
+from app.repositories.comments import CommentRepository
+from app.repositories.movies import MovieRepository
 from app.schemas.comments import (
     CommentCreateSchema,
     CommentResponseSchema,
 )
+from app.services.comments import CommentService
 
 router = APIRouter()
 
@@ -37,9 +34,12 @@ async def create_movie_comment(
     movie_id: int,
     payload: CommentCreateSchema,
     db: Annotated[AsyncSession, Depends(get_db)],
+    movies: Annotated[MovieRepository, Depends(get_movie_repo)],
+    comments: Annotated[CommentRepository, Depends(get_comment_repo)],
+    comment_service: Annotated[CommentService, Depends(get_comment_service)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> CommentResponseSchema:
-    movie = await get_movie_by_id(db, movie_id)
+    movie = await movies.get_by_id(movie_id)
     if movie is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -47,7 +47,7 @@ async def create_movie_comment(
         )
 
     if payload.parent_id is not None:
-        parent = await get_comment_by_id(db, payload.parent_id)
+        parent = await comments.get_by_id(payload.parent_id)
         if parent is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -59,8 +59,7 @@ async def create_movie_comment(
                 detail="Parent comment belongs to another movie.",
             )
 
-    comment = await create_comment(
-        db,
+    comment = await comment_service.create_comment(
         user.id,
         movie_id,
         payload.content,
@@ -89,10 +88,10 @@ async def create_movie_comment(
 )
 async def list_movie_comments(
     movie_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    comments: Annotated[CommentRepository, Depends(get_comment_repo)],
 ) -> list[CommentResponseSchema]:
-    comments = await get_movie_comments(db, movie_id)
+    movie_comments = await comments.get_movie_comments(movie_id)
     return [
         CommentResponseSchema.model_validate(comment)
-        for comment in comments
+        for comment in movie_comments
     ]

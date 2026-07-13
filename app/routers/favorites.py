@@ -1,18 +1,12 @@
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
-from app.crud.favorites import (
-    add_favorite,
-    get_favorite,
-    get_favorite_movies_page,
-    remove_favorite,
-)
-from app.crud.movies import get_movie_by_id
-from app.db.session import get_db
+from app.api.deps import get_current_user, get_favorite_repo, get_movie_repo
 from app.models.accounts import User
+from app.repositories.favorites import FavoriteRepository
+
+from app.repositories.movies import MovieRepository
 from app.schemas.favorites import FavoriteResponseSchema
 from app.schemas.movies import (
     MovieFilterParams,
@@ -36,7 +30,7 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
 )
 async def list_favorites(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    favorites: Annotated[FavoriteRepository, Depends(get_favorite_repo)],
     user: Annotated[User, Depends(get_current_user)],
     page: Annotated[int, Query(ge=1)] = 1,
     per_page: Annotated[int, Query(ge=1, le=100)] = 10,
@@ -56,8 +50,8 @@ async def list_favorites(
         sort_order=sort_order,
     )
 
-    items, total = await get_favorite_movies_page(
-        db, user.id, page, per_page, params
+    items, total = await favorites.get_favorite_movies_page(
+        user.id, page, per_page, params
     )
     total_pages = (total + per_page - 1) // per_page
 
@@ -83,26 +77,27 @@ async def list_favorites(
 )
 async def add_movie_favorite(
     movie_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    favorites: Annotated[FavoriteRepository, Depends(get_favorite_repo)],
+    movies: Annotated[MovieRepository, Depends(get_movie_repo)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> FavoriteResponseSchema:
-    movie = await get_movie_by_id(db, movie_id)
+    movie = await movies.get_by_id(movie_id)
     if movie is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Movie not found.",
         )
 
-    existing = await get_favorite(db, user.id, movie_id)
+    existing = await favorites.get(user.id, movie_id)
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Movie already in favorites.",
         )
 
-    favorite = await add_favorite(db, user.id, movie_id)
-    await db.commit()
-    await db.refresh(favorite)
+    favorite = await favorites.add(user.id, movie_id)
+    await favorites.db.commit()
+    await favorites.db.refresh(favorite)
 
     return FavoriteResponseSchema.model_validate(favorite)
 
@@ -118,14 +113,14 @@ async def add_movie_favorite(
 )
 async def remove_movie_favorite(
     movie_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    favorites: Annotated[FavoriteRepository, Depends(get_favorite_repo)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> None:
-    removed = await remove_favorite(db, user.id, movie_id)
+    removed = await favorites.remove(user.id, movie_id)
     if not removed:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Movie not in favorites.",
         )
 
-    await db.commit()
+    await favorites.db.commit()
