@@ -26,5 +26,14 @@ Thumbs.db
 staticfiles/
 media/
 
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+
 *.sqlite3
 *.db
+dev_seed_movies.py
+dev_seed_user.py
+dev_seed_genres.py
+dev_seed_order.py
+
